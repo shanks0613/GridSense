@@ -1,0 +1,6 @@
+{
+  "name": "GridSense",
+  "description": "Schneider Electric GridSense - Next-generation smart building IoT sensor suite with interactive 3D multi-floor digital twin and proprietary kinetic spatial disassembly engine.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
