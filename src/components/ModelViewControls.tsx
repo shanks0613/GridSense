@@ -17,7 +17,12 @@ import {
   VolumeX,
   Wind,
 } from 'lucide-react';
-import { WeatherData, PRESET_FACILITIES } from '../utils/weather';
+import {
+  WeatherData,
+  PRESET_FACILITIES,
+  WEATHER_PRESETS,
+  WeatherPresetType,
+} from '../utils/weather';
 
 interface ModelViewControlsProps {
   expanded: boolean;
@@ -29,6 +34,7 @@ interface ModelViewControlsProps {
   vrMode: boolean;
   weatherData: WeatherData | null;
   selectedLocation: string;
+  activeWeatherPreset?: WeatherPresetType;
   onToggleExpand: () => void;
   onSelectFloor: (floor: 'all' | 1 | 2) => void;
   onTogglePerspective: () => void;
@@ -36,6 +42,7 @@ interface ModelViewControlsProps {
   onToggleHeatmap: () => void;
   onToggleVrMode: () => void;
   onSelectLocation: (locationKey: string) => void;
+  onSelectWeatherPreset?: (preset: WeatherPresetType) => void;
 }
 
 export const ModelViewControls: React.FC<ModelViewControlsProps> = ({
@@ -48,6 +55,7 @@ export const ModelViewControls: React.FC<ModelViewControlsProps> = ({
   vrMode,
   weatherData,
   selectedLocation,
+  activeWeatherPreset = 'live',
   onToggleExpand,
   onSelectFloor,
   onTogglePerspective,
@@ -55,6 +63,7 @@ export const ModelViewControls: React.FC<ModelViewControlsProps> = ({
   onToggleHeatmap,
   onToggleVrMode,
   onSelectLocation,
+  onSelectWeatherPreset,
 }) => {
   const [weatherMenuOpen, setWeatherMenuOpen] = useState(false);
 
@@ -67,29 +76,30 @@ export const ModelViewControls: React.FC<ModelViewControlsProps> = ({
   const getWeatherIcon = (cond?: WeatherData['condition']) => {
     switch (cond) {
       case 'rain':
-        return <CloudRain className="w-3.5 h-3.5 text-cyan-400" />;
+        return <CloudRain className="w-3.5 h-3.5 text-[#ff8a50]" />;
       case 'thunderstorm':
-        return <CloudLightning className="w-3.5 h-3.5 text-amber-400 animate-pulse" />;
+        return <CloudLightning className="w-3.5 h-3.5 text-[#e06d3b] animate-pulse" />;
       case 'clouds':
       case 'fog':
-        return <Cloud className="w-3.5 h-3.5 text-slate-300" />;
+        return <Cloud className="w-3.5 h-3.5 text-[#d4d4d8]" />;
       default:
-        return <CloudSun className="w-3.5 h-3.5 text-amber-400" />;
+        return <CloudSun className="w-3.5 h-3.5 text-[#ff8a50]" />;
     }
   };
 
   return (
-    <div className="absolute bottom-5 left-1/2 -translate-x-1/2 z-30 flex flex-wrap items-center justify-center gap-2 w-auto max-w-[98vw] pointer-events-auto">
-      {/* 1. Floor Selector Panel */}
-      <div className="flex items-center p-1 rounded-xl bg-black/90 backdrop-blur-2xl border border-amber-500/35 shadow-[0_10px_35px_rgba(0,0,0,0.8)]">
+    <div className="absolute bottom-5 left-1/2 -translate-x-1/2 z-30 flex flex-wrap items-center justify-center gap-2 w-auto max-w-[98vw] pointer-events-auto font-sans">
+      {/* 1. Floor Selector Panel with Physical Elevation Highlights */}
+      <div className="flex items-center p-1 rounded-xl bg-[#1e1e24]/95 backdrop-blur-2xl border border-[#3a3a44] shadow-[0_10px_35px_rgba(0,0,0,0.4),0_0_20px_rgba(224,109,59,0.15)]">
         <button
           type="button"
           onClick={() => onSelectFloor('all')}
           className={`flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-medium transition-all cursor-pointer ${
             activeFloor === 'all'
-              ? 'bg-gradient-to-r from-amber-400 to-amber-500 text-black font-semibold shadow-[0_0_15px_rgba(245,158,11,0.5)]'
-              : 'text-slate-300 hover:text-white hover:bg-white/5'
+              ? 'bg-gradient-to-r from-[#d95d2c] to-[#e06d3b] text-white font-semibold shadow-[0_0_15px_rgba(224,109,59,0.45)]'
+              : 'text-[#d4d4d8] hover:text-white hover:bg-white/5'
           }`}
+          title="Overview: Assemble All Levels in Full Dual-Deck Architecture"
         >
           <Building2 className="w-3.5 h-3.5" />
           <span className="whitespace-nowrap">All Floors</span>
@@ -100,9 +110,10 @@ export const ModelViewControls: React.FC<ModelViewControlsProps> = ({
           onClick={() => onSelectFloor(1)}
           className={`px-3 py-2 rounded-lg text-xs font-medium transition-all whitespace-nowrap cursor-pointer ${
             activeFloor === 1
-              ? 'bg-gradient-to-r from-amber-400 to-amber-500 text-black font-semibold shadow-[0_0_15px_rgba(245,158,11,0.5)]'
-              : 'text-slate-300 hover:text-white hover:bg-white/5'
+              ? 'bg-gradient-to-r from-[#d95d2c] to-[#e06d3b] text-white font-semibold shadow-[0_0_15px_rgba(224,109,59,0.45)]'
+              : 'text-[#d4d4d8] hover:text-white hover:bg-white/5'
           }`}
+          title="Highlight Floor 1: Elevates Upper Deck smoothly with spring physics and isolates Ground Wing"
         >
           Floor 1 (Ground)
         </button>
@@ -112,39 +123,47 @@ export const ModelViewControls: React.FC<ModelViewControlsProps> = ({
           onClick={() => onSelectFloor(2)}
           className={`px-3 py-2 rounded-lg text-xs font-medium transition-all whitespace-nowrap cursor-pointer ${
             activeFloor === 2
-              ? 'bg-gradient-to-r from-amber-400 to-amber-500 text-black font-semibold shadow-[0_0_15px_rgba(245,158,11,0.5)]'
-              : 'text-slate-300 hover:text-white hover:bg-white/5'
+              ? 'bg-gradient-to-r from-[#d95d2c] to-[#e06d3b] text-white font-semibold shadow-[0_0_15px_rgba(224,109,59,0.45)]'
+              : 'text-[#d4d4d8] hover:text-white hover:bg-white/5'
           }`}
+          title="Highlight Floor 2: Lifts roof canopy with spring physics and isolates Upper Deck"
         >
           Floor 2 (Upper)
         </button>
       </div>
 
-      {/* 2. Real-Time Meteorological Weather Sync (OpenWeatherMap / Open-Meteo) */}
+      {/* 2. Keyless Real-Time Meteorological Weather Sync & Simulation */}
       <div className="relative">
         <button
           type="button"
           onClick={() => setWeatherMenuOpen(!weatherMenuOpen)}
-          className="flex items-center gap-1.5 px-3 py-2.5 rounded-xl text-xs font-medium border border-cyan-500/35 bg-black/90 hover:bg-black text-cyan-200 backdrop-blur-2xl shadow-xl transition-all cursor-pointer"
-          title="OpenWeather Real-Time Meteorological Lighting Sync"
+          className="flex items-center gap-1.5 px-3 py-2.5 rounded-xl text-xs font-medium border border-[#3a3a44] bg-[#1e1e24]/95 hover:bg-[#25252d] text-[#ff8a50] backdrop-blur-2xl shadow-xl transition-all cursor-pointer"
+          title="Keyless Meteorological Climate & Lighting Sync (No API Key Required)"
         >
           {getWeatherIcon(weatherData?.condition)}
           <span className="font-mono text-white text-[11px]">
             {weatherData ? `${weatherData.tempC}°C` : 'Live Weather'}
           </span>
-          <span className="text-[10px] text-slate-400 font-mono hidden sm:inline">
+          <span className="text-[10px] text-[#a1a1aa] font-mono hidden sm:inline">
             · {weatherData?.city.split(' ')[0]}
           </span>
+          {weatherData?.isManualOverride && (
+            <span className="w-1.5 h-1.5 rounded-full bg-[#ff8a50]" title="Manual Simulation" />
+          )}
         </button>
 
         {weatherMenuOpen && (
-          <div className="absolute bottom-12 left-0 w-64 p-2.5 rounded-xl bg-black/95 backdrop-blur-2xl border border-cyan-500/40 shadow-2xl z-40 text-xs space-y-2">
-            <div className="flex items-center justify-between pb-1.5 border-b border-white/10 text-[10px] font-mono text-cyan-400">
+          <div className="absolute bottom-12 left-0 w-72 p-3 rounded-xl bg-[#1e1e24]/98 backdrop-blur-2xl border border-[#3a3a44] shadow-2xl z-40 text-xs space-y-3">
+            <div className="flex items-center justify-between pb-1.5 border-b border-[#2d2d36] text-[10px] font-mono text-[#ff8a50]">
               <span className="flex items-center gap-1">
                 <MapPin className="w-3 h-3" /> Schneider Global Hubs
               </span>
-              <span>OpenWeather</span>
+              <span className="text-[9px] px-1.5 py-0.5 rounded bg-[#25252d] border border-[#3a3a44] text-[#d4d4d8]">
+                Keyless Sync
+              </span>
             </div>
+
+            {/* Global Hubs */}
             <div className="space-y-1">
               {Object.entries(PRESET_FACILITIES).map(([key, fac]) => (
                 <button
@@ -152,21 +171,52 @@ export const ModelViewControls: React.FC<ModelViewControlsProps> = ({
                   type="button"
                   onClick={() => {
                     onSelectLocation(key);
+                    if (onSelectWeatherPreset) onSelectWeatherPreset('live');
                     setWeatherMenuOpen(false);
                   }}
                   className={`w-full text-left px-2 py-1.5 rounded-lg flex items-center justify-between transition-colors ${
-                    selectedLocation === key
-                      ? 'bg-cyan-500/20 text-cyan-200 font-semibold border border-cyan-500/30'
-                      : 'text-slate-300 hover:bg-white/5 hover:text-white'
+                    selectedLocation === key && activeWeatherPreset === 'live'
+                      ? 'bg-[#e06d3b]/20 text-[#ff8a50] font-semibold border border-[#e06d3b]/30'
+                      : 'text-[#d4d4d8] hover:bg-white/5 hover:text-white'
                   }`}
                 >
                   <span className="truncate">{fac.city}</span>
-                  <span className="font-mono text-[10px] text-slate-400">{fac.country}</span>
+                  <span className="font-mono text-[10px] text-[#a1a1aa]">{fac.country}</span>
                 </button>
               ))}
             </div>
+
+            {/* Quick Meteorological Simulation Controls */}
+            {onSelectWeatherPreset && (
+              <div className="pt-2 border-t border-[#2d2d36] space-y-1.5">
+                <div className="text-[10px] font-mono text-[#ff8a50] uppercase tracking-wider flex items-center justify-between">
+                  <span>Atmosphere Simulation</span>
+                  <span className="text-[#a1a1aa] text-[9px]">1-Click Demo</span>
+                </div>
+                <div className="grid grid-cols-2 gap-1.5">
+                  {WEATHER_PRESETS.map((p) => (
+                    <button
+                      key={p.id}
+                      type="button"
+                      onClick={() => {
+                        onSelectWeatherPreset(p.id);
+                        setWeatherMenuOpen(false);
+                      }}
+                      className={`px-2 py-1.5 rounded text-[11px] text-left transition-colors truncate ${
+                        activeWeatherPreset === p.id
+                          ? 'bg-[#e06d3b]/25 border border-[#e06d3b]/50 text-[#ff8a50] font-semibold'
+                          : 'bg-[#25252d] text-[#d4d4d8] hover:bg-[#2d2d36] hover:text-white border border-[#3a3a44]'
+                      }`}
+                    >
+                      {p.label.split(' ')[0]} {p.label.split(' ')[1]}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+
             {weatherData && (
-              <div className="pt-1.5 border-t border-white/10 text-[10px] font-mono text-slate-400 flex items-center justify-between">
+              <div className="pt-1.5 border-t border-[#2d2d36] text-[10px] font-mono text-[#a1a1aa] flex items-center justify-between">
                 <span>Sky: {weatherData.conditionLabel}</span>
                 <span>Wind: {weatherData.windSpeedKmH} km/h</span>
               </div>
@@ -175,78 +225,78 @@ export const ModelViewControls: React.FC<ModelViewControlsProps> = ({
         )}
       </div>
 
-      {/* 3. Real-time Sun-Path & Day Cycle Toggle (Shadow Capture & Lux Simulation) */}
+      {/* 3. Sun-Path & Day Cycle Toggle */}
       <button
         type="button"
         onClick={onToggleDayCycle}
         className={`flex items-center gap-2 px-3 py-2.5 rounded-xl text-xs font-medium border transition-all backdrop-blur-2xl shadow-xl cursor-pointer ${
           dayCycleEnabled
-            ? 'bg-amber-500/25 border-amber-400 text-amber-200 shadow-[0_0_20px_rgba(245,158,11,0.4)]'
-            : 'bg-black/90 hover:bg-black border-amber-500/35 text-slate-300 hover:text-white'
+            ? 'bg-[#e06d3b]/25 border-[#e06d3b] text-[#ff8a50] shadow-[0_0_20px_rgba(224,109,59,0.35)]'
+            : 'bg-[#1e1e24]/95 hover:bg-[#25252d] border-[#3a3a44] text-[#d4d4d8] hover:text-white'
         }`}
         title="Toggle Real-Time Sun-Path Shadow Simulation & Circadian Lux Cycle"
       >
         {isNight ? (
-          <Moon className={`w-3.5 h-3.5 ${dayCycleEnabled ? 'text-blue-300 animate-pulse' : 'text-slate-400'}`} />
+          <Moon className={`w-3.5 h-3.5 ${dayCycleEnabled ? 'text-[#ff8a50] animate-pulse' : 'text-[#71717a]'}`} />
         ) : (
-          <Sun className={`w-3.5 h-3.5 ${dayCycleEnabled ? 'text-amber-400 animate-spin' : 'text-slate-400'}`} style={{ animationDuration: '10s' }} />
+          <Sun className={`w-3.5 h-3.5 ${dayCycleEnabled ? 'text-[#ff8a50] animate-spin' : 'text-[#71717a]'}`} style={{ animationDuration: '10s' }} />
         )}
         <div className="flex items-center gap-1.5 whitespace-nowrap font-medium">
           <span>Day Cycle</span>
-          <span className={`text-[10px] font-mono px-1.5 py-0.5 rounded ${dayCycleEnabled ? 'bg-amber-400/25 text-amber-300' : 'bg-white/10 text-slate-400'}`}>
+          <span className={`text-[10px] font-mono px-1.5 py-0.5 rounded ${dayCycleEnabled ? 'bg-[#e06d3b]/30 text-white' : 'bg-white/10 text-[#a1a1aa]'}`}>
             {dayCycleEnabled ? timeFormatted : '13:00'}
           </span>
         </div>
       </button>
 
-      {/* 4. Real-Time Occupancy Heat Map Layer Overlay */}
+      {/* 4. Occupancy Heatmap Layer Toggle */}
       <button
         type="button"
         onClick={onToggleHeatmap}
         className={`flex items-center gap-1.5 px-3 py-2.5 rounded-xl text-xs font-medium border transition-all backdrop-blur-2xl shadow-xl cursor-pointer ${
           heatmapEnabled
-            ? 'bg-gradient-to-r from-red-500/25 via-amber-500/25 to-blue-500/25 border-orange-400 text-orange-200 shadow-[0_0_22px_rgba(249,115,22,0.45)]'
-            : 'bg-black/90 hover:bg-black border-amber-500/35 text-slate-300 hover:text-white'
+            ? 'bg-gradient-to-r from-[#d95d2c]/30 to-[#b84c1e]/30 border-[#e06d3b] text-[#ff8a50] shadow-[0_0_22px_rgba(224,109,59,0.35)]'
+            : 'bg-[#1e1e24]/95 hover:bg-[#25252d] border-[#3a3a44] text-[#d4d4d8] hover:text-white'
         }`}
         title="Toggle GridSense Radar Occupancy Density Heatmap Layer"
       >
-        <Activity className={`w-3.5 h-3.5 ${heatmapEnabled ? 'text-orange-400 animate-pulse' : 'text-slate-400'}`} />
+        <Activity className={`w-3.5 h-3.5 ${heatmapEnabled ? 'text-[#ff8a50] animate-pulse' : 'text-[#71717a]'}`} />
         <span className="whitespace-nowrap font-medium">
           {heatmapEnabled ? 'Heatmap: Active' : 'Occupancy Heatmap'}
         </span>
       </button>
 
-      {/* 5. VR-Ready Stereoscopic Dual Viewport Mode (Standard VR / Google Cardboard) */}
+      {/* 5. VR-Ready Stereoscopic Dual Viewport Mode */}
       <button
         type="button"
         onClick={onToggleVrMode}
         className={`flex items-center gap-1.5 px-3 py-2.5 rounded-xl text-xs font-medium border transition-all backdrop-blur-2xl shadow-xl cursor-pointer ${
           vrMode
-            ? 'bg-purple-500/25 border-purple-400 text-purple-200 shadow-[0_0_20px_rgba(168,85,247,0.45)]'
-            : 'bg-black/90 hover:bg-black border-amber-500/35 text-slate-300 hover:text-white'
+            ? 'bg-[#e06d3b]/25 border-[#e06d3b] text-[#ff8a50] shadow-[0_0_20px_rgba(224,109,59,0.35)]'
+            : 'bg-[#1e1e24]/95 hover:bg-[#25252d] border-[#3a3a44] text-[#d4d4d8] hover:text-white'
         }`}
         title="Toggle Stereoscopic Dual Viewport VR Mode for Cardboard / VR Headsets"
       >
-        <Glasses className={`w-3.5 h-3.5 ${vrMode ? 'text-purple-400 animate-pulse' : 'text-slate-400'}`} />
+        <Glasses className={`w-3.5 h-3.5 ${vrMode ? 'text-[#ff8a50] animate-pulse' : 'text-[#71717a]'}`} />
         <span className="whitespace-nowrap font-medium">
           {vrMode ? 'VR Mode Active' : 'VR View'}
         </span>
       </button>
 
-      {/* 6. Camera Perspective Toggle (Isometric Top-Down / Orbital Perspective) */}
+      {/* 6. Camera Perspective Toggle */}
       <button
         type="button"
         onClick={onTogglePerspective}
         className={`flex items-center gap-1.5 px-3 py-2.5 rounded-xl text-xs font-medium border transition-all backdrop-blur-2xl shadow-xl cursor-pointer ${
           cameraPerspective === 'isometric'
-            ? 'bg-amber-500/25 border-amber-400 text-amber-200 shadow-[0_0_20px_rgba(245,158,11,0.35)]'
-            : 'bg-black/90 hover:bg-black border-amber-500/35 text-slate-300 hover:text-white'
+            ? 'bg-[#e06d3b]/25 border-[#e06d3b] text-[#ff8a50] shadow-[0_0_20px_rgba(224,109,59,0.35)]'
+            : 'bg-[#1e1e24]/95 hover:bg-[#25252d] border-[#3a3a44] text-[#d4d4d8] hover:text-white'
         }`}
-        title="Toggle 45° Top-Down Axonometric Isometric View for Architectural Building Analysis"
+        title="Toggle 45° Top-Down Axonometric Isometric View for Architectural Analysis"
       >
         <Compass
           className={`w-3.5 h-3.5 ${
-            cameraPerspective === 'isometric' ? 'text-amber-400 animate-spin' : 'text-slate-400'
+            cameraPerspective === 'isometric' ? 'text-[#ff8a50] animate-spin' : 'text-[#71717a]'
           }`}
           style={{ animationDuration: '8s' }}
         />
@@ -261,8 +311,8 @@ export const ModelViewControls: React.FC<ModelViewControlsProps> = ({
         onClick={onToggleExpand}
         className={`group relative flex items-center gap-2 px-4.5 py-2.5 rounded-xl text-xs font-semibold tracking-wide uppercase transition-all shadow-2xl backdrop-blur-2xl border cursor-pointer ${
           expanded
-            ? 'bg-amber-400 hover:bg-amber-300 text-black border-amber-300 shadow-[0_0_30px_rgba(245,158,11,0.7)]'
-            : 'bg-black/90 hover:bg-black text-amber-300 border-amber-500/60 hover:border-amber-400 shadow-[0_0_25px_rgba(212,175,55,0.35)]'
+            ? 'bg-gradient-to-r from-[#d95d2c] via-[#e06d3b] to-[#b84c1e] text-white border-[#ff8a50] shadow-[0_0_30px_rgba(224,109,59,0.5)]'
+            : 'bg-[#1e1e24]/95 hover:bg-[#25252d] text-[#ff8a50] border-[#e06d3b]/60 hover:border-[#ff8a50] shadow-[0_0_25px_rgba(224,109,59,0.25)]'
         }`}
       >
         {expanded ? (
@@ -272,13 +322,13 @@ export const ModelViewControls: React.FC<ModelViewControlsProps> = ({
           </>
         ) : (
           <>
-            <Maximize2 className="w-4 h-4 transition-transform group-hover:scale-110 text-amber-400" />
+            <Maximize2 className="w-4 h-4 transition-transform group-hover:scale-110 text-[#ff8a50]" />
             <span className="whitespace-nowrap">Expand · Kinetic Spatial Reveal</span>
           </>
         )}
         <span
           className={`ml-1 text-[9px] px-1.5 py-0.5 rounded font-mono ${
-            expanded ? 'bg-black/25 text-black' : 'bg-amber-500/20 text-amber-200'
+            expanded ? 'bg-[#1e1e24]/60 text-white' : 'bg-[#e06d3b]/20 text-[#ff8a50]'
           }`}
         >
           {expanded ? 'Deconstructed' : 'Assembled'}
@@ -293,24 +343,25 @@ export const AudioToggleHeaderButton: React.FC<{
   onToggleAudio: () => void;
   ambientNoiseEnabled: boolean;
   onToggleAmbientNoise: () => void;
+  audioError?: string | null;
 }> = ({ audioEnabled, onToggleAudio, ambientNoiseEnabled, onToggleAmbientNoise }) => {
   return (
-    <div className="flex items-center gap-1.5 p-1 rounded-xl bg-black/85 backdrop-blur-xl border border-amber-500/30 shadow-lg">
+    <div className="flex items-center gap-1.5 p-1 rounded-xl bg-[#1e1e24]/90 backdrop-blur-xl border border-[#3a3a44] shadow-lg">
       {/* 1. Interactive Sound FX Toggle */}
       <button
         type="button"
         onClick={onToggleAudio}
         className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium transition-all cursor-pointer ${
           audioEnabled
-            ? 'bg-amber-500/20 text-amber-300 border border-amber-500/40'
-            : 'text-slate-400 hover:text-slate-200'
+            ? 'bg-[#e06d3b]/20 text-[#ff8a50] border border-[#e06d3b]/40'
+            : 'text-[#a1a1aa] hover:text-white'
         }`}
         title={audioEnabled ? 'Sound FX Enabled (Expand & Floor clicks)' : 'Sound FX Muted'}
       >
         {audioEnabled ? (
-          <Volume2 className="w-3.5 h-3.5 text-amber-400" />
+          <Volume2 className="w-3.5 h-3.5 text-[#ff8a50]" />
         ) : (
-          <VolumeX className="w-3.5 h-3.5 text-slate-500" />
+          <VolumeX className="w-3.5 h-3.5 text-[#71717a]" />
         )}
         <span className="font-mono text-[10px] tracking-tight">FX</span>
       </button>
@@ -323,8 +374,8 @@ export const AudioToggleHeaderButton: React.FC<{
         onClick={onToggleAmbientNoise}
         className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium transition-all cursor-pointer ${
           ambientNoiseEnabled
-            ? 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/40 shadow-[0_0_12px_rgba(6,182,212,0.3)]'
-            : 'text-slate-400 hover:text-slate-200'
+            ? 'bg-[#c2572b]/25 text-[#ff8a50] border border-[#c2572b]/50 shadow-[0_0_12px_rgba(194,87,43,0.3)]'
+            : 'text-[#a1a1aa] hover:text-white'
         }`}
         title={
           ambientNoiseEnabled
@@ -334,7 +385,7 @@ export const AudioToggleHeaderButton: React.FC<{
       >
         <Wind
           className={`w-3.5 h-3.5 ${
-            ambientNoiseEnabled ? 'text-cyan-400 animate-pulse' : 'text-slate-500'
+            ambientNoiseEnabled ? 'text-[#ff8a50] animate-pulse' : 'text-[#71717a]'
           }`}
         />
         <span className="font-mono text-[10px] tracking-tight">HVAC Drone</span>

@@ -24,19 +24,19 @@ export const SensorViewer3D: React.FC = () => {
     renderer.toneMappingExposure = 1.2;
     container.appendChild(renderer.domElement);
 
-    // Realistic lights for crystal black & gold sensor
-    const amb = new THREE.AmbientLight(0xffffff, 0.7);
+    // High-end Studio Lighting in Deep Slate & Electric Copper
+    const amb = new THREE.AmbientLight(0xffffff, 0.75);
     scene.add(amb);
 
     const keyLight = new THREE.DirectionalLight(0xffffff, 1.4);
     keyLight.position.set(6, 8, 8);
     scene.add(keyLight);
 
-    const goldRim = new THREE.DirectionalLight(0xd4af37, 2.2);
-    goldRim.position.set(-6, -4, -6);
-    scene.add(goldRim);
+    const copperRim = new THREE.DirectionalLight(0xe06d3b, 2.8);
+    copperRim.position.set(-6, -4, -6);
+    scene.add(copperRim);
 
-    const frontFill = new THREE.DirectionalLight(0xe8c872, 0.8);
+    const frontFill = new THREE.DirectionalLight(0xff8a50, 0.9);
     frontFill.position.set(0, 4, 6);
     scene.add(frontFill);
 
@@ -44,10 +44,10 @@ export const SensorViewer3D: React.FC = () => {
     const sensorGroup = new THREE.Group();
     scene.add(sensorGroup);
 
-    // 1. Crystal Obsidian Main Bezel / Disk
+    // 1. Deep Slate Titanium Main Enclosure
     const bodyMat = new THREE.MeshStandardMaterial({
-      color: 0x08090d,
-      roughness: 0.15,
+      color: 0x26262e,
+      roughness: 0.22,
       metalness: 0.85,
     });
     const bodyGeo = new THREE.CylinderGeometry(3.0, 3.2, 0.7, 64);
@@ -55,19 +55,19 @@ export const SensorViewer3D: React.FC = () => {
     body.rotation.x = Math.PI / 2;
     sensorGroup.add(body);
 
-    // 2. Brushed 24K Gold Chamfer Ring
-    const goldMat = new THREE.MeshStandardMaterial({
-      color: 0xd4af37,
-      roughness: 0.25,
-      metalness: 0.9,
+    // 2. Brushed Electric Copper Chamfer Ring
+    const copperRingMat = new THREE.MeshStandardMaterial({
+      color: 0xe06d3b,
+      roughness: 0.2,
+      metalness: 0.95,
     });
-    const goldRingGeo = new THREE.TorusGeometry(3.18, 0.12, 32, 100);
-    const goldRing = new THREE.Mesh(goldRingGeo, goldMat);
-    sensorGroup.add(goldRing);
+    const ringGeo = new THREE.TorusGeometry(3.18, 0.12, 32, 100);
+    const ring = new THREE.Mesh(ringGeo, copperRingMat);
+    sensorGroup.add(ring);
 
-    // 3. Inner Smoky Crystalline Optical Lens with Gold-Refracting Glassmorphism
+    // 3. Inner Smoky Crystalline Optical Lens
     const glassMat = new THREE.MeshPhysicalMaterial({
-      color: 0x1e2c40,
+      color: 0x2c2c34,
       roughness: 0.04,
       metalness: 0.12,
       transmission: 0.88,
@@ -83,11 +83,11 @@ export const SensorViewer3D: React.FC = () => {
     innerLens.position.z = 0.36;
     sensorGroup.add(innerLens);
 
-    // 3b. Concentric Optical Fresnel Grooves (catches bright golden specular highlights)
+    // 3b. Concentric Optical Fresnel Grooves (Electric Copper)
     const grooveMat = new THREE.MeshStandardMaterial({
-      color: 0xffd700,
-      emissive: 0x8a6d14,
-      emissiveIntensity: 0.6,
+      color: 0xff8a50,
+      emissive: 0xe06d3b,
+      emissiveIntensity: 0.7,
       roughness: 0.15,
       metalness: 0.95,
     });
@@ -99,14 +99,13 @@ export const SensorViewer3D: React.FC = () => {
     grooveRing2.position.z = 0.40;
     sensorGroup.add(grooveRing2);
 
-    // 4. Schneider Optical Core with Higher-Contrast 'Golden Glow' Emission Shader
-    // Requirement: ensures the sensor remains distinctly visible against the dark obsidian housing
+    // 4. Optical Core with Electric Copper Glow Emission
     const coreMat = new THREE.MeshStandardMaterial({
-      color: 0x241704,
+      color: 0x222228,
       roughness: 0.18,
       metalness: 0.75,
-      emissive: 0xffa500, // Vibrant Golden Glow emission
-      emissiveIntensity: 1.65, // High contrast against dark obsidian
+      emissive: 0xe06d3b,
+      emissiveIntensity: 1.85,
     });
     const coreGeo = new THREE.SphereGeometry(0.85, 36, 36);
     const core = new THREE.Mesh(coreGeo, coreMat);
@@ -114,21 +113,21 @@ export const SensorViewer3D: React.FC = () => {
     core.scale.set(1, 1, 0.42);
     sensorGroup.add(core);
 
-    // 4b. Radiant Internal Gold Optical Emitter (Beams warm golden light through crystalline glass)
-    const coreInternalLight = new THREE.PointLight(0xffbe3b, 3.6, 6.0, 1.8);
+    // 4b. Radiant Internal Copper Optical Emitter
+    const coreInternalLight = new THREE.PointLight(0xe06d3b, 3.8, 6.0, 1.8);
     coreInternalLight.position.set(0, 0, 0.52);
     sensorGroup.add(coreInternalLight);
 
-    // 5. Polished 24K Gold Central Aperture Bezel
+    // 5. Polished Central Aperture Bezel
     const coreRingGeo = new THREE.TorusGeometry(0.88, 0.06, 24, 64);
-    const coreRing = new THREE.Mesh(coreRingGeo, goldMat);
+    const coreRing = new THREE.Mesh(coreRingGeo, copperRingMat);
     coreRing.position.z = 0.46;
     sensorGroup.add(coreRing);
 
-    // 5b. High-Contrast Laser Focal Dot with Golden Glow Emission
+    // 5b. High-Contrast Laser Focal Dot with Copper/Flame Glow
     const focalDotMat = new THREE.MeshStandardMaterial({
       color: 0xffffff,
-      emissive: 0xffb700,
+      emissive: 0xff8a50,
       emissiveIntensity: 2.2,
       roughness: 0.05,
     });
@@ -137,8 +136,8 @@ export const SensorViewer3D: React.FC = () => {
     focalDot.position.z = 0.53;
     sensorGroup.add(focalDot);
 
-    // 6. Halo Status LED Ring (Schneider Electric signature gold/amber pulse ring)
-    const haloMat = new THREE.MeshBasicMaterial({ color: 0xf59e0b });
+    // 6. Halo Status LED Ring (Electric Copper)
+    const haloMat = new THREE.MeshBasicMaterial({ color: 0xe06d3b });
     const haloRingGeo = new THREE.TorusGeometry(1.68, 0.04, 16, 64);
     const haloRing = new THREE.Mesh(haloRingGeo, haloMat);
     haloRing.position.z = 0.42;
@@ -185,7 +184,6 @@ export const SensorViewer3D: React.FC = () => {
       animId = requestAnimationFrame(animate);
       const elapsed = (performance.now() - startTime) / 1000;
 
-      // Gentle ambient drift when not dragging
       if (!isDragging) {
         targetRotY += 0.003;
       }
@@ -193,7 +191,7 @@ export const SensorViewer3D: React.FC = () => {
       sensorGroup.rotation.y += (targetRotY - sensorGroup.rotation.y) * 0.05;
       sensorGroup.rotation.x += (targetRotX - sensorGroup.rotation.x) * 0.05;
 
-      // Halo gentle breathing
+      // Halo breathing pulse
       const pulse = 0.98 + 0.04 * Math.sin(elapsed * 2.5);
       haloRing.scale.set(pulse, pulse, 1);
 
@@ -224,9 +222,9 @@ export const SensorViewer3D: React.FC = () => {
   }, []);
 
   return (
-    <div className="relative w-full h-[460px] flex items-center justify-center">
+    <div className="relative w-full h-[460px] flex items-center justify-center font-sans">
       <div ref={mountRef} className="w-full h-full cursor-grab active:cursor-grabbing" />
-      <div className="absolute bottom-3 left-1/2 -translate-x-1/2 px-3 py-1 bg-black/50 backdrop-blur-md border border-amber-500/20 rounded-full text-[11px] text-amber-300/80 tracking-wide font-mono uppercase pointer-events-none">
+      <div className="absolute bottom-3 left-1/2 -translate-x-1/2 px-3 py-1 bg-[#1e1e24]/90 backdrop-blur-md border border-[#e06d3b]/40 rounded-full text-[11px] text-[#ff8a50] tracking-wide font-mono uppercase pointer-events-none shadow-lg">
         Drag to Rotate 360° · Schneider Optical Core
       </div>
     </div>

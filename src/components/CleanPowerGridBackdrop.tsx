@@ -1,270 +1,306 @@
-import React, { useState } from 'react';
-import { Play, Pause, Eye, Sparkles } from 'lucide-react';
+import React, { useState, useRef, useEffect } from 'react';
+import cleanBackdropImg from '../assets/images/clean_energy_backdrop_1790606804362.jpg';
+
+interface CleanPowerGridBackdropProps {
+  className?: string;
+}
 
 /**
  * CleanPowerGridBackdrop Component
- * Provides a stunning, clearly visible, cinematic background of clean energy infrastructure:
- * High-voltage electricity transmission towers, rotating wind turbines, power grid lines,
- * kinetic electrical current pulses, and vivid HTML5 video playback.
  * 
- * COLOR DIRECTIVE: Zero green & black combination. Rich Midnight Sapphire, Solar Gold & Electric Cyan.
+ * Cinematic clean energy background in Deep Slate & Electric Copper:
+ * - Clarity fixed to exactly 26% so the video blends seamlessly with the backdrop images
+ * - Background clarity bar completely removed as requested
+ * - Kinetic SVG electrical grid: rotating wind turbines, high-voltage transmission towers,
+ *   catenary cables, and traveling current pulses in Electric Copper & Warm Bronze.
+ * - STRICT COMPLIANCE: No blue, no black, no green, no golden, no yellow.
  */
-export const CleanPowerGridBackdrop: React.FC = () => {
-  const [isPlaying, setIsPlaying] = useState(true);
-  const [videoOpacity, setVideoOpacity] = useState(85); // Clearly visible by default
+export const CleanPowerGridBackdrop: React.FC<CleanPowerGridBackdropProps> = ({
+  className = '',
+}) => {
+  const [videoLoaded, setVideoLoaded] = useState(false);
+  const videoRef = useRef<HTMLVideoElement>(null);
 
-  const togglePlayback = (e: React.MouseEvent) => {
-    e.stopPropagation();
-    const vid = document.getElementById('clean-energy-bg-video') as HTMLVideoElement | null;
+  // Fixed clarity set exactly to 26% as specified by user
+  const clarity = 26;
+
+  // Keep video playing reliably
+  useEffect(() => {
+    const vid = videoRef.current;
     if (vid) {
-      if (vid.paused) {
-        vid.play();
-        setIsPlaying(true);
-      } else {
-        vid.pause();
-        setIsPlaying(false);
+      vid.muted = true;
+      vid.playsInline = true;
+      const playPromise = vid.play();
+      if (playPromise !== undefined) {
+        playPromise.catch(() => {});
       }
     }
-  };
+  }, []);
+
+  // Visual parameters calibrated for 26% clarity for seamless image blending
+  const opacityVal = clarity / 100; // 0.26
+  const brightnessVal = 0.75 + (clarity / 100) * 0.55; // ~0.893
+  const contrastVal = 0.9 + (clarity / 100) * 0.35; // ~0.991
+  const vignetteOpacity = 0.55;
 
   return (
-    <div className="absolute inset-0 rounded-3xl overflow-hidden pointer-events-none select-none z-0">
-      {/* 1. VIVID, CLEARLY VISIBLE HTML5 VIDEO OF CLEAN ENERGY INFRASTRUCTURE */}
+    <div
+      className={`absolute inset-0 rounded-3xl overflow-hidden pointer-events-none select-none z-0 ${className}`}
+      data-testid="clean-power-grid-backdrop"
+    >
+      {/* 1. PHOTOREALISTIC HIGH-RES POSTER (Visible immediately, blended at 26%) */}
+      <img
+        src={cleanBackdropImg}
+        alt="Clean Power Grid Background"
+        className="absolute inset-0 w-full h-full object-cover pointer-events-none"
+        style={{
+          opacity: opacityVal,
+          filter: `brightness(${brightnessVal}) contrast(${contrastVal}) saturate(1.1)`,
+          transition: 'opacity 0.2s ease-out',
+        }}
+      />
+
+      {/* 2. LOCAL HTML5 VIDEO (Blended seamlessly at 26% opacity with screen mix-blend) */}
       <video
-        id="clean-energy-bg-video"
+        ref={videoRef}
         autoPlay
         loop
         muted
         playsInline
-        className="absolute inset-0 w-full h-full object-cover transition-opacity duration-700 filter brightness-105 contrast-110 saturate-125 pointer-events-auto"
-        style={{ opacity: videoOpacity / 100 }}
+        onLoadedData={() => setVideoLoaded(true)}
+        className="absolute inset-0 w-full h-full object-cover pointer-events-none mix-blend-screen"
+        style={{
+          opacity: videoLoaded ? opacityVal * 0.9 : 0,
+          filter: `brightness(${brightnessVal}) contrast(${contrastVal})`,
+          transition: 'opacity 0.2s ease-out',
+        }}
       >
-        <source
-          src="https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerEscapes.mp4"
-          type="video/mp4"
-        />
-        <source
-          src="https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerBlazes.mp4"
-          type="video/mp4"
-        />
+        <source src="/videos/clean_energy_grid.mp4" type="video/mp4" />
+        <source src="/videos/sample_energy.mp4" type="video/mp4" />
       </video>
 
-      {/* 2. Interactive Video Clarity Controller for Judges (Floating in Top Right) */}
-      <div className="absolute top-4 right-4 z-20 pointer-events-auto flex items-center gap-2 px-3 py-1.5 rounded-xl bg-[#090d16]/80 backdrop-blur-xl border border-amber-500/30 shadow-[0_8px_25px_rgba(0,0,0,0.6)]">
-        <button
-          type="button"
-          onClick={togglePlayback}
-          className="flex items-center gap-1.5 text-[11px] font-mono font-medium text-amber-300 hover:text-amber-200 transition-colors cursor-pointer"
-          title="Toggle Background Video Play/Pause"
-        >
-          {isPlaying ? <Pause className="w-3 h-3 text-amber-400" /> : <Play className="w-3 h-3 text-amber-400" />}
-          <span>{isPlaying ? 'PAUSE BG' : 'PLAY BG'}</span>
-        </button>
-
-        <span className="w-px h-3 bg-white/20" />
-
-        <div className="flex items-center gap-1.5 text-[11px] font-mono text-cyan-300">
-          <Eye className="w-3 h-3 text-cyan-400" />
-          <span>CLARITY</span>
-          <input
-            type="range"
-            min="40"
-            max="100"
-            value={videoOpacity}
-            onChange={(e) => setVideoOpacity(Number(e.target.value))}
-            className="w-16 h-1 bg-slate-700 rounded-lg appearance-none cursor-pointer accent-amber-400"
-            title="Adjust Background Video Visibility"
-          />
-          <span className="text-[10px] text-amber-400 w-6">{videoOpacity}%</span>
-        </div>
-      </div>
-
-      {/* 3. Procedural Kinetic SVG Power Grid: Wind Turbines, High-Voltage Towers & Electric Lines */}
+      {/* 3. VECTOR TRANSMISSION GRID (Deep Slate & Electric Copper currents) */}
       <svg
-        className="absolute inset-0 w-full h-full opacity-60 pointer-events-none"
-        preserveAspectRatio="xMidYMid slice"
+        className="absolute inset-0 w-full h-full pointer-events-none"
         viewBox="0 0 1200 600"
-        xmlns="http://www.w3.org/2000/svg"
+        preserveAspectRatio="xMidYMid slice"
+        style={{
+          opacity: 0.38,
+        }}
       >
         <defs>
-          {/* Gradient for transmission cables */}
-          <linearGradient id="powerCableGrad" x1="0%" y1="0%" x2="100%" y2="0%">
-            <stop offset="0%" stopColor="#f59e0b" stopOpacity="0.85" />
-            <stop offset="50%" stopColor="#38bdf8" stopOpacity="0.95" />
-            <stop offset="100%" stopColor="#f59e0b" stopOpacity="0.85" />
+          <linearGradient id="powerCableCopperGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+            <stop offset="0%" stopColor="#c2572b" stopOpacity="0.85" />
+            <stop offset="35%" stopColor="#e06d3b" stopOpacity="0.95" />
+            <stop offset="70%" stopColor="#f07e48" stopOpacity="0.95" />
+            <stop offset="100%" stopColor="#ff8a50" stopOpacity="0.85" />
           </linearGradient>
 
-          {/* Electric pulse glow filter */}
-          <filter id="electricGlow" x="-20%" y="-20%" width="140%" height="140%">
-            <feGaussianBlur stdDeviation="3.5" result="blur" />
-            <feMerge>
-              <feMergeNode in="blur" />
-              <feMergeNode in="SourceGraphic" />
-            </feMerge>
+          <filter id="copperPylonGlow" x="-20%" y="-20%" width="140%" height="140%">
+            <feGaussianBlur stdDeviation="3.0" result="blur" />
+            <feComposite in="SourceGraphic" in2="blur" operator="over" />
           </filter>
-
-          <linearGradient id="towerGrad" x1="0%" y1="0%" x2="0%" y2="100%">
-            <stop offset="0%" stopColor="#fbbf24" stopOpacity="0.8" />
-            <stop offset="100%" stopColor="#1e293b" stopOpacity="0.3" />
-          </linearGradient>
         </defs>
 
-        {/* --- Wind Turbine 1 (Left Far Field) --- */}
-        <g transform="translate(180, 230)">
-          {/* Turbine Mast */}
-          <polygon points="-4,230 4,230 2,0 -2,0" fill="url(#towerGrad)" />
-          {/* Nacelle */}
-          <ellipse cx="0" cy="0" rx="9" ry="5.5" fill="#f59e0b" opacity="0.9" />
-          <circle cx="0" cy="0" r="3.5" fill="#ffffff" />
-          {/* Rotating Blades */}
-          <g className="animate-spin" style={{ transformOrigin: '0px 0px', animationDuration: '6s' }}>
-            <path d="M 0 0 C -3 -30, -5 -70, 0 -110 C 5 -70, 3 -30, 0 0" fill="#f8fafc" opacity="0.9" />
+        {/* --- Wind Turbine 1 (West High Ridge) --- */}
+        <g transform="translate(140, 260)" opacity="0.85">
+          {/* Aerodynamic Mast */}
+          <polygon points="-4,220 4,220 2,0 -2,0" fill="#e2e8f0" opacity="0.8" />
+          <circle cx="0" cy="0" r="5.5" fill="#e06d3b" />
+          {/* Animated 3-Blade Rotor */}
+          <g
+            className="origin-center"
+            style={{
+              animation: 'spin 5.5s linear infinite',
+              transformOrigin: '0px 0px',
+            }}
+          >
+            <path d="M 0 0 C -3.5 -30, -5 -80, 0 -130 C 5 -80, 3.5 -30, 0 0" fill="#f8fafc" opacity="0.9" />
             <g transform="rotate(120)">
-              <path d="M 0 0 C -3 -30, -5 -70, 0 -110 C 5 -70, 3 -30, 0 0" fill="#f8fafc" opacity="0.9" />
+              <path d="M 0 0 C -3.5 -30, -5 -80, 0 -130 C 5 -80, 3.5 -30, 0 0" fill="#f8fafc" opacity="0.9" />
             </g>
             <g transform="rotate(240)">
-              <path d="M 0 0 C -3 -30, -5 -70, 0 -110 C 5 -70, 3 -30, 0 0" fill="#f8fafc" opacity="0.9" />
+              <path d="M 0 0 C -3.5 -30, -5 -80, 0 -130 C 5 -80, 3.5 -30, 0 0" fill="#f8fafc" opacity="0.9" />
             </g>
           </g>
-          {/* Solar Gold Aviation Beacon on Top */}
-          <circle cx="0" cy="-2" r="2.5" fill="#f59e0b" className="animate-ping" />
+          <circle cx="0" cy="-2" r="3.5" fill="#f07e48" className="animate-ping" />
         </g>
 
-        {/* --- Wind Turbine 2 (Right Horizon) --- */}
-        <g transform="translate(1040, 270)">
-          <polygon points="-3,190 3,190 1.5,0 -1.5,0" fill="url(#towerGrad)" />
-          <ellipse cx="0" cy="0" rx="7" ry="4.5" fill="#f59e0b" opacity="0.85" />
-          <circle cx="0" cy="0" r="2.5" fill="#ffffff" />
-          <g className="animate-spin" style={{ transformOrigin: '0px 0px', animationDuration: '8s' }}>
-            <path d="M 0 0 C -2.5 -25, -4 -60, 0 -90 C 4 -60, 2.5 -25, 0 0" fill="#f8fafc" opacity="0.85" />
+        {/* --- Wind Turbine 2 (Central Ridge) --- */}
+        <g transform="translate(620, 290)" opacity="0.75">
+          <polygon points="-3,190 3,190 1.5,0 -1.5,0" fill="#cbd5e1" opacity="0.75" />
+          <circle cx="0" cy="0" r="4.5" fill="#e06d3b" />
+          <g
+            className="origin-center"
+            style={{
+              animation: 'spin 6.8s linear infinite',
+              transformOrigin: '0px 0px',
+            }}
+          >
+            <path d="M 0 0 C -3 -25, -4 -65, 0 -105 C 4 -65, 3 -25, 0 0" fill="#f8fafc" opacity="0.85" />
             <g transform="rotate(120)">
-              <path d="M 0 0 C -2.5 -25, -4 -60, 0 -90 C 4 -60, 2.5 -25, 0 0" fill="#f8fafc" opacity="0.85" />
+              <path d="M 0 0 C -3 -25, -4 -65, 0 -105 C 4 -65, 3 -25, 0 0" fill="#f8fafc" opacity="0.85" />
             </g>
             <g transform="rotate(240)">
-              <path d="M 0 0 C -2.5 -25, -4 -60, 0 -90 C 4 -60, 2.5 -25, 0 0" fill="#f8fafc" opacity="0.85" />
+              <path d="M 0 0 C -3 -25, -4 -65, 0 -105 C 4 -65, 3 -25, 0 0" fill="#f8fafc" opacity="0.85" />
             </g>
           </g>
-          <circle cx="0" cy="-2" r="2" fill="#38bdf8" className="animate-ping" />
+          <circle cx="0" cy="-2" r="3" fill="#ff8a50" className="animate-ping" />
         </g>
 
-        {/* --- High Voltage Transmission Tower 1 (Mid-Left) --- */}
-        <g transform="translate(380, 160)" stroke="#f59e0b" strokeWidth="1.8" opacity="0.8" fill="none">
-          <line x1="-30" y1="360" x2="-8" y2="40" />
-          <line x1="30" y1="360" x2="8" y2="40" />
+        {/* --- Wind Turbine 3 (Far East Plateau) --- */}
+        <g transform="translate(1080, 270)" opacity="0.8">
+          <polygon points="-3.5,210 3.5,210 1.8,0 -1.8,0" fill="#e2e8f0" opacity="0.8" />
+          <circle cx="0" cy="0" r="5" fill="#e06d3b" />
+          <g
+            className="origin-center"
+            style={{
+              animation: 'spin 5.0s linear infinite',
+              transformOrigin: '0px 0px',
+            }}
+          >
+            <path d="M 0 0 C -2.5 -25, -4 -60, 0 -95 C 4 -60, 2.5 -25, 0 0" fill="#f8fafc" opacity="0.85" />
+            <g transform="rotate(120)">
+              <path d="M 0 0 C -2.5 -25, -4 -60, 0 -95 C 4 -60, 2.5 -25, 0 0" fill="#f8fafc" opacity="0.85" />
+            </g>
+            <g transform="rotate(240)">
+              <path d="M 0 0 C -2.5 -25, -4 -60, 0 -95 C 4 -60, 2.5 -25, 0 0" fill="#f8fafc" opacity="0.85" />
+            </g>
+          </g>
+          <circle cx="0" cy="-2" r="2.5" fill="#f07e48" className="animate-ping" />
+        </g>
+
+        {/* --- High Voltage Transmission Pylon 1 --- */}
+        <g transform="translate(390, 150)" stroke="#e06d3b" strokeWidth="2" opacity="0.8" fill="none">
+          <line x1="-32" y1="370" x2="-8" y2="40" />
+          <line x1="32" y1="370" x2="8" y2="40" />
           <line x1="-8" y1="40" x2="0" y2="0" />
           <line x1="8" y1="40" x2="0" y2="0" />
-          <line x1="-60" y1="70" x2="60" y2="70" />
-          <line x1="-75" y1="120" x2="75" y2="120" />
-          <line x1="-50" y1="170" x2="50" y2="170" />
-          <line x1="-18" y1="200" x2="18" y2="250" />
-          <line x1="18" y1="200" x2="-18" y2="250" />
-          <line x1="-24" y1="270" x2="24" y2="320" />
-          <line x1="24" y1="270" x2="-24" y2="320" />
-          <line x1="-60" y1="70" x2="-60" y2="85" stroke="#38bdf8" strokeWidth="3" />
-          <line x1="60" y1="70" x2="60" y2="85" stroke="#38bdf8" strokeWidth="3" />
-          <line x1="-75" y1="120" x2="-75" y2="135" stroke="#38bdf8" strokeWidth="3" />
-          <line x1="75" y1="120" x2="75" y2="135" stroke="#38bdf8" strokeWidth="3" />
-          <circle cx="0" cy="0" r="3.5" fill="#f59e0b" stroke="none" />
+          <line x1="-65" y1="70" x2="65" y2="70" />
+          <line x1="-80" y1="120" x2="80" y2="120" />
+          <line x1="-55" y1="170" x2="55" y2="170" />
+          <line x1="-18" y1="200" x2="18" y2="260" />
+          <line x1="18" y1="200" x2="-18" y2="260" />
+          <line x1="-24" y1="270" x2="24" y2="330" />
+          <line x1="24" y1="270" x2="-24" y2="330" />
+          {/* Ceramic Insulator Strings (Electric Copper) */}
+          <line x1="-65" y1="70" x2="-65" y2="86" stroke="#f07e48" strokeWidth="3" />
+          <line x1="65" y1="70" x2="65" y2="86" stroke="#f07e48" strokeWidth="3" />
+          <line x1="-80" y1="120" x2="-80" y2="136" stroke="#f07e48" strokeWidth="3" />
+          <line x1="80" y1="120" x2="80" y2="136" stroke="#f07e48" strokeWidth="3" />
+          <circle cx="0" cy="0" r="3.5" fill="#e06d3b" stroke="none" />
         </g>
 
-        {/* --- High Voltage Transmission Tower 2 (Mid-Right) --- */}
-        <g transform="translate(800, 180)" stroke="#f59e0b" strokeWidth="1.8" opacity="0.8" fill="none">
-          <line x1="-26" y1="340" x2="-7" y2="35" />
-          <line x1="26" y1="340" x2="7" y2="35" />
+        {/* --- High Voltage Transmission Pylon 2 --- */}
+        <g transform="translate(820, 170)" stroke="#e06d3b" strokeWidth="2" opacity="0.8" fill="none">
+          <line x1="-28" y1="350" x2="-7" y2="35" />
+          <line x1="28" y1="350" x2="7" y2="35" />
           <line x1="-7" y1="35" x2="0" y2="0" />
           <line x1="7" y1="35" x2="0" y2="0" />
-          <line x1="-55" y1="65" x2="55" y2="65" />
-          <line x1="-68" y1="110" x2="68" y2="110" />
-          <line x1="-45" y1="155" x2="45" y2="155" />
-          <line x1="-16" y1="190" x2="16" y2="235" />
-          <line x1="16" y1="190" x2="-16" y2="235" />
-          <line x1="-68" y1="110" x2="-68" y2="125" stroke="#38bdf8" strokeWidth="3" />
-          <line x1="68" y1="110" x2="68" y2="125" stroke="#38bdf8" strokeWidth="3" />
-          <circle cx="0" cy="0" r="3.5" fill="#38bdf8" stroke="none" />
+          <line x1="-58" y1="65" x2="58" y2="65" />
+          <line x1="-72" y1="110" x2="72" y2="110" />
+          <line x1="-48" y1="155" x2="48" y2="155" />
+          <line x1="-16" y1="190" x2="16" y2="245" />
+          <line x1="16" y1="190" x2="-16" y2="245" />
+          <line x1="-72" y1="110" x2="-72" y2="126" stroke="#f07e48" strokeWidth="3" />
+          <line x1="72" y1="110" x2="72" y2="126" stroke="#f07e48" strokeWidth="3" />
+          <circle cx="0" cy="0" r="3.5" fill="#f07e48" stroke="none" />
         </g>
 
-        {/* --- High Voltage Catenary Power Transmission Lines --- */}
+        {/* --- Catenary Power Transmission Cables --- */}
         <path
-          d="M 0 215 Q 160 255 320 245 T 740 260 T 1200 240"
+          d="M 0 215 Q 160 255 325 245 T 748 260 T 1200 240"
           fill="none"
-          stroke="url(#powerCableGrad)"
+          stroke="url(#powerCableCopperGrad)"
+          strokeWidth="2.5"
+          opacity="0.9"
+        />
+        <path
+          d="M 0 260 Q 180 305 310 295 T 740 305 T 1200 285"
+          fill="none"
+          stroke="url(#powerCableCopperGrad)"
+          strokeWidth="2.8"
+          opacity="0.95"
+        />
+        <path
+          d="M 0 310 Q 200 355 435 330 T 880 335 T 1200 325"
+          fill="none"
+          stroke="url(#powerCableCopperGrad)"
           strokeWidth="2.2"
           opacity="0.85"
         />
 
+        {/* --- Kinetic Electrical Current Pulses (Electric Copper & Bronze Glow) --- */}
         <path
-          d="M 0 260 Q 180 305 305 295 T 732 305 T 1200 285"
+          d="M 0 215 Q 160 255 325 245 T 748 260 T 1200 240"
           fill="none"
-          stroke="url(#powerCableGrad)"
-          strokeWidth="2.4"
-          opacity="0.9"
-        />
-
-        <path
-          d="M 0 310 Q 200 355 430 330 T 875 335 T 1200 325"
-          fill="none"
-          stroke="url(#powerCableGrad)"
-          strokeWidth="2.0"
-          opacity="0.8"
-        />
-
-        {/* --- Animated Kinetic Electricity Pulses (Cyan and Gold - ZERO green) --- */}
-        <path
-          d="M 0 215 Q 160 255 320 245 T 740 260 T 1200 240"
-          fill="none"
-          stroke="#38bdf8"
-          strokeWidth="4.5"
-          strokeDasharray="25 180"
-          filter="url(#electricGlow)"
-        >
-          <animate
-            attributeName="stroke-dashoffset"
-            from="400"
-            to="0"
-            dur="2.5s"
-            repeatCount="indefinite"
-          />
-        </path>
-
-        <path
-          d="M 0 260 Q 180 305 305 295 T 732 305 T 1200 285"
-          fill="none"
-          stroke="#fbbf24"
+          stroke="#ff8a50"
           strokeWidth="5"
-          strokeDasharray="30 220"
-          filter="url(#electricGlow)"
+          strokeLinecap="round"
+          strokeDasharray="40 500"
+          opacity="0.9"
+          filter="url(#copperPylonGlow)"
         >
           <animate
             attributeName="stroke-dashoffset"
-            from="500"
+            from="540"
             to="0"
-            dur="3.0s"
+            dur="1.7s"
             repeatCount="indefinite"
           />
         </path>
 
-        {/* Third pulse: Electric Cyan (replacing previous green pulse) */}
         <path
-          d="M 0 310 Q 200 355 430 330 T 875 335 T 1200 325"
+          d="M 0 260 Q 180 305 310 295 T 740 305 T 1200 285"
           fill="none"
-          stroke="#00e5ff"
-          strokeWidth="4"
-          strokeDasharray="20 200"
-          filter="url(#electricGlow)"
+          stroke="#f07e48"
+          strokeWidth="6"
+          strokeLinecap="round"
+          strokeDasharray="50 540"
+          opacity="0.95"
+          filter="url(#copperPylonGlow)"
         >
           <animate
             attributeName="stroke-dashoffset"
-            from="440"
+            from="590"
             to="0"
-            dur="2.2s"
+            dur="1.4s"
+            repeatCount="indefinite"
+          />
+        </path>
+
+        <path
+          d="M 0 310 Q 200 355 435 330 T 880 335 T 1200 325"
+          fill="none"
+          stroke="#e06d3b"
+          strokeWidth="4.5"
+          strokeLinecap="round"
+          strokeDasharray="35 450"
+          opacity="0.85"
+          filter="url(#copperPylonGlow)"
+        >
+          <animate
+            attributeName="stroke-dashoffset"
+            from="490"
+            to="0"
+            dur="2.1s"
             repeatCount="indefinite"
           />
         </path>
       </svg>
 
-      {/* 4. Soft Vignette Overlay (Clear center so video shines through brilliantly) */}
-      <div className="absolute inset-0 bg-gradient-to-b from-[#090d16]/40 via-transparent to-[#090d16]/75 pointer-events-none" />
-      <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,rgba(245,158,11,0.04),transparent_80%)] pointer-events-none" />
+      {/* 4. SOFT ATMOSPHERIC VIGNETTE (Deep Slate #18181c, perfectly blending with the card container) */}
+      <div
+        className="absolute inset-0 bg-gradient-to-b from-[#18181c] via-transparent to-[#18181c] pointer-events-none"
+        style={{
+          opacity: vignetteOpacity,
+          transition: 'opacity 0.2s ease-out',
+        }}
+      />
+      <div
+        className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,rgba(224,109,59,0.08),transparent_75%)] pointer-events-none"
+        style={{ opacity: opacityVal }}
+      />
     </div>
   );
 };

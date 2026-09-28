@@ -1,18 +1,18 @@
 @import "tailwindcss";
 
-@keyframes subtleGoldPulse {
+@keyframes subtleCopperPulse {
   0%, 100% {
-    box-shadow: 0 0 20px rgba(212, 175, 55, 0.12), inset 0 0 15px rgba(212, 175, 55, 0.05);
-    border-color: rgba(212, 175, 55, 0.25);
+    box-shadow: 0 0 20px rgba(224, 109, 59, 0.15), inset 0 0 15px rgba(224, 109, 59, 0.08);
+    border-color: rgba(224, 109, 59, 0.3);
   }
   50% {
-    box-shadow: 0 0 45px rgba(212, 175, 55, 0.32), 0 0 70px rgba(245, 158, 11, 0.12), inset 0 0 25px rgba(212, 175, 55, 0.15);
-    border-color: rgba(245, 158, 11, 0.55);
+    box-shadow: 0 0 45px rgba(224, 109, 59, 0.35), 0 0 70px rgba(240, 126, 72, 0.2), inset 0 0 25px rgba(224, 109, 59, 0.2);
+    border-color: rgba(255, 138, 80, 0.6);
   }
 }
 
 .assembled-container-pulse {
-  animation: subtleGoldPulse 3.5s ease-in-out infinite;
+  animation: subtleCopperPulse 3.5s ease-in-out infinite;
 }
 
 /* Scroll In and Out Text Animation Classes */
@@ -37,17 +37,15 @@
 }
 
 /* Electric Grid Background Glow Animation */
-@keyframes electricPulse {
+@keyframes copperElectricPulse {
   0%, 100% {
     opacity: 0.45;
   }
   50% {
-    opacity: 0.8;
+    opacity: 0.85;
   }
 }
 
 .electric-glow-canvas {
-  animation: electricPulse 4s ease-in-out infinite;
+  animation: copperElectricPulse 4s ease-in-out infinite;
 }
-
-

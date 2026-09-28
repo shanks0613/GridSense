@@ -27,7 +27,8 @@ interface OfficeModel3DProps {
 }
 
 /**
- * Creates a procedural 2D Gaussian radial gradient texture for the thermal occupancy heat map.
+ * Procedural radial gradient texture for occupancy heatmap.
+ * Strictly compliant: Electric Copper & Rust tones, NO blue, NO green, NO golden, NO yellow.
  */
 function createRadialHeatTexture(colorHex: string): THREE.CanvasTexture {
   const canvas = document.createElement('canvas');
@@ -45,6 +46,21 @@ function createRadialHeatTexture(colorHex: string): THREE.CanvasTexture {
   }
   const texture = new THREE.CanvasTexture(canvas);
   return texture;
+}
+
+/**
+ * Second-order spring physics simulation for organic architectural transitions
+ */
+interface SpringVal {
+  current: number;
+  velocity: number;
+}
+
+function updateSpring(spring: SpringVal, target: number, stiffness = 130, damping = 16, dt = 0.016): number {
+  const force = -stiffness * (spring.current - target) - damping * spring.velocity;
+  spring.velocity += force * dt;
+  spring.current += spring.velocity * dt;
+  return spring.current;
 }
 
 export const OfficeModel3D: React.FC<OfficeModel3DProps> = ({
@@ -68,13 +84,29 @@ export const OfficeModel3D: React.FC<OfficeModel3DProps> = ({
   const rendererRef = useRef<THREE.WebGLRenderer | null>(null);
   const controlsRef = useRef<OrbitControls | null>(null);
 
-  // References for animation
-  const animStateRef = useRef({
-    currentExpansion: 0,
+  // References for spring physics animation
+  const springsRef = useRef({
+    expansion: { current: 0, velocity: 0 },
+    upperLift: { current: 0, velocity: 0 },
+    roofLift: { current: 0, velocity: 0 },
+    groundOpacity: { current: 1.0, velocity: 0 },
+    upperOpacity: { current: 1.0, velocity: 0 },
+    floor1Highlight: { current: 0, velocity: 0 },
+    floor2Highlight: { current: 0, velocity: 0 },
+    cameraY: { current: 3.2, velocity: 0 },
+    cameraDist: { current: 34, velocity: 0 },
+  });
+
+  const animTargetsRef = useRef({
     targetExpansion: 0,
+    targetUpperLift: 0,
+    targetRoofLift: 0,
+    targetGroundOpacity: 1.0,
+    targetUpperOpacity: 1.0,
+    targetFloor1Highlight: 0,
+    targetFloor2Highlight: 0,
     cameraTargetY: 3.2,
     cameraTargetDistance: 34,
-    cameraCurrentY: 3.2,
     isExpanded: false,
     isIsometric: false,
     transitioningPerspective: false,
@@ -84,9 +116,10 @@ export const OfficeModel3D: React.FC<OfficeModel3DProps> = ({
     vrMode: false,
     weatherCondition: 'clear',
     thunderTimer: 0,
+    activeFloor: 'all' as 'all' | 1 | 2,
   });
 
-  // Lights and interactive meshes
+  // Meshes & Lights
   const groupsRef = useRef<{
     root: THREE.Group;
     groundFloor: THREE.Group;
@@ -100,7 +133,10 @@ export const OfficeModel3D: React.FC<OfficeModel3DProps> = ({
     organicCanopy: THREE.Group;
     assembledGlowLine: THREE.Line;
     floor1Highlight: THREE.Line;
+    floor1PlaneHighlight: THREE.Mesh;
     floor2Highlight: THREE.Line;
+    floor2PlaneHighlight: THREE.Mesh;
+    floorFocusLight: THREE.SpotLight;
     sunLight: THREE.DirectionalLight;
     ambientLight: THREE.AmbientLight;
     hemiLight: THREE.HemisphereLight;
@@ -116,38 +152,79 @@ export const OfficeModel3D: React.FC<OfficeModel3DProps> = ({
 
   // Sync camera perspective mode
   useEffect(() => {
-    animStateRef.current.isIsometric = cameraPerspective === 'isometric';
-    animStateRef.current.transitioningPerspective = true;
+    animTargetsRef.current.isIsometric = cameraPerspective === 'isometric';
+    animTargetsRef.current.transitioningPerspective = true;
     const t = setTimeout(() => {
-      animStateRef.current.transitioningPerspective = false;
+      animTargetsRef.current.transitioningPerspective = false;
     }, 1200);
     return () => clearTimeout(t);
   }, [cameraPerspective]);
 
   // Sync VR Mode state
   useEffect(() => {
-    animStateRef.current.vrMode = vrMode;
+    animTargetsRef.current.vrMode = vrMode;
   }, [vrMode]);
 
-  // Sync expanded state to target expansion and auto-frame camera
+  // Sync floor isolation & spring target parameters
   useEffect(() => {
-    animStateRef.current.targetExpansion = expanded ? 1.0 : 0.0;
-    animStateRef.current.isExpanded = expanded;
+    animTargetsRef.current.targetExpansion = expanded ? 1.0 : 0.0;
+    animTargetsRef.current.isExpanded = expanded;
+    animTargetsRef.current.activeFloor = activeFloor;
 
-    // Direct multi-floor view on expansion without rotation needed
     if (expanded) {
-      animStateRef.current.cameraTargetY = 5.2;
-      animStateRef.current.cameraTargetDistance = 48;
+      animTargetsRef.current.targetUpperLift = 0;
+      animTargetsRef.current.targetRoofLift = 0;
+      animTargetsRef.current.targetGroundOpacity = 1.0;
+      animTargetsRef.current.targetUpperOpacity = 1.0;
+      animTargetsRef.current.targetFloor1Highlight = 0;
+      animTargetsRef.current.targetFloor2Highlight = 0;
+      animTargetsRef.current.cameraTargetY = 5.2;
+      animTargetsRef.current.cameraTargetDistance = 48;
     } else {
-      animStateRef.current.cameraTargetY = activeFloor === 1 ? 2.0 : activeFloor === 2 ? 4.5 : 3.2;
-      animStateRef.current.cameraTargetDistance = activeFloor === 'all' ? 34 : 26;
+      if (activeFloor === 1) {
+        // Floor 1 transition:
+        // - Upper floor springs vertically upward (+6.8) and non-selected floor fades out to 0.16
+        // - Roof springs vertically upward (+14.5) and fades out to 0.12
+        // - Ground floor remains 100% solid and highlighted with Electric Copper perimeter & spotlight
+        animTargetsRef.current.targetUpperLift = 6.8;
+        animTargetsRef.current.targetRoofLift = 14.5;
+        animTargetsRef.current.targetGroundOpacity = 1.0;
+        animTargetsRef.current.targetUpperOpacity = 0.16;
+        animTargetsRef.current.targetFloor1Highlight = 1.0;
+        animTargetsRef.current.targetFloor2Highlight = 0.0;
+        animTargetsRef.current.cameraTargetY = 1.8;
+        animTargetsRef.current.cameraTargetDistance = 24;
+      } else if (activeFloor === 2) {
+        // Floor 2 transition:
+        // - Roof springs vertically upward (+13.5) and fades out to 0.12
+        // - Non-selected Ground floor fades out to 0.18
+        // - Upper floor remains 100% solid and highlighted with Electric Copper perimeter & spotlight
+        animTargetsRef.current.targetUpperLift = 0.0;
+        animTargetsRef.current.targetRoofLift = 13.5;
+        animTargetsRef.current.targetGroundOpacity = 0.18;
+        animTargetsRef.current.targetUpperOpacity = 1.0;
+        animTargetsRef.current.targetFloor1Highlight = 0.0;
+        animTargetsRef.current.targetFloor2Highlight = 1.0;
+        animTargetsRef.current.cameraTargetY = 4.6;
+        animTargetsRef.current.cameraTargetDistance = 24;
+      } else {
+        // All floors: return to assembled dual-deck presentation
+        animTargetsRef.current.targetUpperLift = 0.0;
+        animTargetsRef.current.targetRoofLift = 0.0;
+        animTargetsRef.current.targetGroundOpacity = 1.0;
+        animTargetsRef.current.targetUpperOpacity = 1.0;
+        animTargetsRef.current.targetFloor1Highlight = 0.0;
+        animTargetsRef.current.targetFloor2Highlight = 0.0;
+        animTargetsRef.current.cameraTargetY = 3.2;
+        animTargetsRef.current.cameraTargetDistance = 34;
+      }
     }
   }, [expanded, activeFloor]);
 
   // Sync Day Cycle and Sun-Path parameters
   useEffect(() => {
-    animStateRef.current.dayCycle = dayCycleEnabled;
-    animStateRef.current.time = timeOfDay;
+    animTargetsRef.current.dayCycle = dayCycleEnabled;
+    animTargetsRef.current.time = timeOfDay;
 
     if (!groupsRef.current) return;
     const { sunLight, ambientLight, frontSoftLight, entranceMainGlow } = groupsRef.current;
@@ -166,14 +243,14 @@ export const OfficeModel3D: React.FC<OfficeModel3DProps> = ({
     if (isDay) {
       const elevation = Math.sin(angle);
       if (elevation < 0.28) {
-        sunLight.color.setHex(0xff9e44);
+        sunLight.color.setHex(0xe06d3b); // Electric copper sunset glow
         sunLight.intensity = 2.4;
         ambientLight.intensity = 0.65;
-        ambientLight.color.setHex(0xffdab0);
+        ambientLight.color.setHex(0xf4e0d4);
         frontSoftLight.intensity = 1.0;
         entranceMainGlow.intensity = 3.6;
       } else {
-        sunLight.color.setHex(0xfff8ee);
+        sunLight.color.setHex(0xfff8f0);
         sunLight.intensity = 3.4;
         ambientLight.intensity = 1.15;
         ambientLight.color.setHex(0xffffff);
@@ -182,20 +259,20 @@ export const OfficeModel3D: React.FC<OfficeModel3DProps> = ({
       }
     } else {
       sunLight.position.set(-18, 30, -22);
-      sunLight.color.setHex(0x2a3e5e);
+      sunLight.color.setHex(0x3a3a44);
       sunLight.intensity = 0.08;
       ambientLight.intensity = 0.06;
-      ambientLight.color.setHex(0x111827);
+      ambientLight.color.setHex(0x222228);
       frontSoftLight.intensity = 0.05;
       entranceMainGlow.intensity = 4.2;
     }
   }, [dayCycleEnabled, timeOfDay]);
 
-  // Sync OpenWeatherMap Meteorological Environment and Skybox
+  // Sync weather environment
   useEffect(() => {
     if (!groupsRef.current || !sceneRef.current) return;
     const cond = weatherData?.condition || 'clear';
-    animStateRef.current.weatherCondition = cond;
+    animTargetsRef.current.weatherCondition = cond;
     const { sunLight, ambientLight, rainParticles } = groupsRef.current;
     const scene = sceneRef.current;
 
@@ -204,38 +281,38 @@ export const OfficeModel3D: React.FC<OfficeModel3DProps> = ({
     }
 
     if (cond === 'rain') {
-      scene.background = new THREE.Color(0x0e141f);
-      scene.fog = new THREE.FogExp2(0x0e141f, 0.015);
-      sunLight.color.setHex(0xb0c4de);
+      scene.background = new THREE.Color(0x141418);
+      scene.fog = new THREE.FogExp2(0x141418, 0.015);
+      sunLight.color.setHex(0xd4d4d8);
       sunLight.intensity = 1.4;
-      ambientLight.color.setHex(0x8fa3bf);
+      ambientLight.color.setHex(0xa1a1aa);
       ambientLight.intensity = 0.75;
     } else if (cond === 'thunderstorm') {
-      scene.background = new THREE.Color(0x070a12);
-      scene.fog = new THREE.FogExp2(0x070a12, 0.018);
-      sunLight.color.setHex(0x708090);
+      scene.background = new THREE.Color(0x101014);
+      scene.fog = new THREE.FogExp2(0x101014, 0.018);
+      sunLight.color.setHex(0xa1a1aa);
       sunLight.intensity = 0.8;
-      ambientLight.color.setHex(0x5a6a80);
+      ambientLight.color.setHex(0x71717a);
       ambientLight.intensity = 0.6;
     } else if (cond === 'clouds') {
-      scene.background = new THREE.Color(0x141822);
-      scene.fog = new THREE.FogExp2(0x141822, 0.012);
-      sunLight.color.setHex(0xffebd2);
+      scene.background = new THREE.Color(0x1a1a20);
+      scene.fog = new THREE.FogExp2(0x1a1a20, 0.012);
+      sunLight.color.setHex(0xf4f4f5);
       sunLight.intensity = 2.1;
-      ambientLight.color.setHex(0xd0d8e2);
+      ambientLight.color.setHex(0xd4d4d8);
       ambientLight.intensity = 0.95;
     } else if (cond === 'fog') {
-      scene.background = new THREE.Color(0x1a202c);
-      scene.fog = new THREE.FogExp2(0x1a202c, 0.024);
-      sunLight.color.setHex(0xffeedd);
+      scene.background = new THREE.Color(0x202026);
+      scene.fog = new THREE.FogExp2(0x202026, 0.024);
+      sunLight.color.setHex(0xe4e4e7);
       sunLight.intensity = 1.2;
-      ambientLight.color.setHex(0xa0aec0);
+      ambientLight.color.setHex(0xa1a1aa);
       ambientLight.intensity = 0.85;
     } else {
       // Clear
-      scene.background = new THREE.Color(0x07080c);
-      scene.fog = new THREE.FogExp2(0x07080c, 0.009);
-      sunLight.color.setHex(0xfff8ee);
+      scene.background = new THREE.Color(0x18181c);
+      scene.fog = new THREE.FogExp2(0x18181c, 0.010);
+      sunLight.color.setHex(0xfff8f0);
       sunLight.intensity = 3.2;
       ambientLight.color.setHex(0xffffff);
       ambientLight.intensity = 1.1;
@@ -244,7 +321,7 @@ export const OfficeModel3D: React.FC<OfficeModel3DProps> = ({
 
   // Sync Occupancy Heatmap overlay
   useEffect(() => {
-    animStateRef.current.heatmap = heatmapEnabled;
+    animTargetsRef.current.heatmap = heatmapEnabled;
     if (!groupsRef.current) return;
     const { heatmapPlanes } = groupsRef.current;
 
@@ -253,10 +330,10 @@ export const OfficeModel3D: React.FC<OfficeModel3DProps> = ({
       const cabin = cabins[id];
       if (cabin && plane.material instanceof THREE.MeshBasicMaterial) {
         const occ = cabin.metrics.occupancy;
-        let hex = '#3b82f6';
-        if (occ >= 4) hex = '#ef4444';
-        else if (occ >= 2) hex = '#f59e0b';
-        else if (occ === 1) hex = '#06b6d4';
+        let hex = '#4a4a55';
+        if (occ >= 4) hex = '#e03b24';
+        else if (occ >= 2) hex = '#e06d3b';
+        else if (occ === 1) hex = '#b87355';
 
         plane.material.map = createRadialHeatTexture(hex);
         plane.material.needsUpdate = true;
@@ -276,13 +353,13 @@ export const OfficeModel3D: React.FC<OfficeModel3DProps> = ({
 
       if (light) {
         light.intensity = isLit ? 5.2 : 0.0;
-        light.color.setHex(isLit ? 0xfff6d6 : 0x000000);
+        light.color.setHex(isLit ? 0xfff2e6 : 0x000000);
         light.distance = 18;
       }
 
       if (marker && marker.material instanceof THREE.MeshStandardMaterial) {
-        marker.material.color.setHex(isLit ? 0xffd700 : 0x332a10);
-        marker.material.emissive.setHex(isLit ? 0xffa500 : 0x110800);
+        marker.material.color.setHex(isLit ? 0xe06d3b : 0x3a302a);
+        marker.material.emissive.setHex(isLit ? 0xff8a50 : 0x1a120c);
         marker.material.emissiveIntensity = isLit ? 2.4 : 0.2;
       }
 
@@ -298,10 +375,10 @@ export const OfficeModel3D: React.FC<OfficeModel3DProps> = ({
     const container = mountRef.current;
     if (!container) return;
 
-    // --- 1. Scene setup ---
+    // --- 1. Scene setup (Deep Slate & Electric Copper) ---
     const scene = new THREE.Scene();
-    scene.background = new THREE.Color(0x07080c);
-    scene.fog = new THREE.FogExp2(0x07080c, 0.009);
+    scene.background = new THREE.Color(0x18181c);
+    scene.fog = new THREE.FogExp2(0x18181c, 0.010);
     sceneRef.current = scene;
 
     // --- 2. Camera setup ---
@@ -339,11 +416,11 @@ export const OfficeModel3D: React.FC<OfficeModel3DProps> = ({
     controls.target.set(0, 3.2, 0);
     controlsRef.current = controls;
 
-    // --- 5. Enhanced Lighting with Real-Time Sun-Path Shadow Capture ---
+    // --- 5. Lighting ---
     const ambientLight = new THREE.AmbientLight(0xffffff, 1.1);
     scene.add(ambientLight);
 
-    const sunLight = new THREE.DirectionalLight(0xfff8ee, 3.2);
+    const sunLight = new THREE.DirectionalLight(0xfff8f0, 3.2);
     sunLight.position.set(24, 42, 24);
     sunLight.castShadow = true;
     sunLight.shadow.mapSize.width = 2048;
@@ -358,31 +435,31 @@ export const OfficeModel3D: React.FC<OfficeModel3DProps> = ({
     sunLight.shadow.radius = 3.5;
     scene.add(sunLight);
 
-    const frontSoftLight = new THREE.DirectionalLight(0xfff6ec, 1.35);
+    const frontSoftLight = new THREE.DirectionalLight(0xfff2e6, 1.35);
     frontSoftLight.position.set(0, 22, 34);
     scene.add(frontSoftLight);
 
-    const fillLight = new THREE.DirectionalLight(0xdbe9fb, 1.1);
+    const fillLight = new THREE.DirectionalLight(0xf4f4f6, 1.1);
     fillLight.position.set(-26, 22, -24);
     scene.add(fillLight);
 
-    const hemiLight = new THREE.HemisphereLight(0xffffff, 0xcdd6e2, 0.85);
+    const hemiLight = new THREE.HemisphereLight(0xffffff, 0xd4d4d8, 0.85);
     hemiLight.position.set(0, 50, 0);
     scene.add(hemiLight);
 
-    const entranceMainGlow = new THREE.PointLight(0xffbe55, 3.8, 20, 1.6);
+    const entranceMainGlow = new THREE.PointLight(0xe06d3b, 3.8, 20, 1.6);
     entranceMainGlow.position.set(0, 2.7, 9.6);
     entranceMainGlow.castShadow = false;
     scene.add(entranceMainGlow);
 
-    const entranceGroundGlow = new THREE.PointLight(0xffd47a, 2.6, 14, 1.8);
+    const entranceGroundGlow = new THREE.PointLight(0xf07e48, 2.6, 14, 1.8);
     entranceGroundGlow.position.set(0, 0.9, 8.8);
     scene.add(entranceGroundGlow);
 
-    // --- 6. Ground Terrain & Paved Forecourt ---
+    // --- 6. Ground Terrain & Paved Forecourt (Deep Slate) ---
     const floorPlaneGeo = new THREE.PlaneGeometry(180, 180);
     const floorPlaneMat = new THREE.MeshStandardMaterial({
-      color: 0x090b0e,
+      color: 0x202026,
       roughness: 0.88,
       metalness: 0.1,
     });
@@ -394,7 +471,7 @@ export const OfficeModel3D: React.FC<OfficeModel3DProps> = ({
 
     const podiumGeo = new THREE.BoxGeometry(40, 0.35, 28);
     const podiumMat = new THREE.MeshStandardMaterial({
-      color: 0x141820,
+      color: 0x282830,
       roughness: 0.8,
       metalness: 0.1,
     });
@@ -406,7 +483,7 @@ export const OfficeModel3D: React.FC<OfficeModel3DProps> = ({
 
     const driveGeo = new THREE.BoxGeometry(34, 0.05, 8.0);
     const driveMat = new THREE.MeshStandardMaterial({
-      color: 0x222630,
+      color: 0x32323c,
       roughness: 0.6,
       metalness: 0.2,
     });
@@ -416,12 +493,12 @@ export const OfficeModel3D: React.FC<OfficeModel3DProps> = ({
     scene.add(drive);
 
     const forecourtBollardMat = new THREE.MeshStandardMaterial({
-      color: 0x182030,
+      color: 0x3a3a44,
       roughness: 0.4,
       metalness: 0.8,
     });
-    const forecourtGoldMat = new THREE.MeshStandardMaterial({
-      color: 0xd4af37,
+    const forecourtCopperMat = new THREE.MeshStandardMaterial({
+      color: 0xe06d3b,
       roughness: 0.25,
       metalness: 0.95,
     });
@@ -432,14 +509,14 @@ export const OfficeModel3D: React.FC<OfficeModel3DProps> = ({
         pedestal.castShadow = true;
         scene.add(pedestal);
 
-        const goldFinial = new THREE.Mesh(new THREE.CylinderGeometry(0.25, 0.25, 0.15, 16), forecourtGoldMat);
-        goldFinial.position.set(hx, 0.9, 12.0);
-        goldFinial.castShadow = true;
-        scene.add(goldFinial);
+        const copperFinial = new THREE.Mesh(new THREE.CylinderGeometry(0.25, 0.25, 0.15, 16), forecourtCopperMat);
+        copperFinial.position.set(hx, 0.9, 12.0);
+        copperFinial.castShadow = true;
+        scene.add(copperFinial);
       }
     }
 
-    // Dynamic Weather Rain Particles (1,200 raindrops falling from sky)
+    // Weather Rain Particles (Silver/Copper drops)
     const rainCount = 1200;
     const rainGeo = new THREE.BufferGeometry();
     const rainPositions = new Float32Array(rainCount * 3);
@@ -450,7 +527,7 @@ export const OfficeModel3D: React.FC<OfficeModel3DProps> = ({
     }
     rainGeo.setAttribute('position', new THREE.BufferAttribute(rainPositions, 3));
     const rainMat = new THREE.PointsMaterial({
-      color: 0xa5b4fc,
+      color: 0xd4d4d8,
       size: 0.15,
       transparent: true,
       opacity: 0.75,
@@ -459,7 +536,7 @@ export const OfficeModel3D: React.FC<OfficeModel3DProps> = ({
     rainParticles.visible = false;
     scene.add(rainParticles);
 
-    // Subtle gold perimeter laser border line (pulses in assembled state)
+    // Electric copper perimeter laser border line
     const glowLinePoints = [
       new THREE.Vector3(-20, 0.37, -14),
       new THREE.Vector3(20, 0.37, -14),
@@ -469,85 +546,92 @@ export const OfficeModel3D: React.FC<OfficeModel3DProps> = ({
     ];
     const glowLineGeo = new THREE.BufferGeometry().setFromPoints(glowLinePoints);
     const glowLineMat = new THREE.LineBasicMaterial({
-      color: 0xd4af37,
+      color: 0xe06d3b,
       transparent: true,
       opacity: 0.45,
     });
     const assembledGlowLine = new THREE.Line(glowLineGeo, glowLineMat);
     scene.add(assembledGlowLine);
 
-    // --- 7. Materials ---
+    // --- 7. Architectural Materials (Deep Slate & Electric Copper) ---
     const extWallMat = new THREE.MeshStandardMaterial({
-      color: 0xf5f0e8,
+      color: 0xf4f4f6,
       roughness: 0.65,
       metalness: 0.1,
     });
     const silverCladMat = new THREE.MeshStandardMaterial({
-      color: 0xe5e8ed,
+      color: 0xe4e4e7,
       roughness: 0.5,
       metalness: 0.25,
     });
     const extRoofMat = new THREE.MeshStandardMaterial({
-      color: 0x4a4a4a,
+      color: 0x3a3a44,
       roughness: 0.7,
       metalness: 0.2,
     });
     const ribbonGlassMat = new THREE.MeshStandardMaterial({
-      color: 0x223042,
+      color: 0x25252d,
       roughness: 0.1,
       metalness: 0.7,
       transparent: true,
       opacity: 0.85,
     });
-    const cyanEnergyMat = new THREE.MeshStandardMaterial({
-      color: 0x0284c7,
+    const copperEnergyMat = new THREE.MeshStandardMaterial({
+      color: 0xe06d3b,
       roughness: 0.25,
       metalness: 0.85,
     });
     const titaniumTowerMat = new THREE.MeshStandardMaterial({
-      color: 0x1e293b,
+      color: 0x303038,
       roughness: 0.4,
       metalness: 0.8,
     });
-    const goldMat = new THREE.MeshStandardMaterial({
-      color: 0xd4af37,
+    const copperTrimMat = new THREE.MeshStandardMaterial({
+      color: 0xc2572b,
       roughness: 0.3,
       metalness: 0.9,
     });
 
     const roomMaterials: Record<string, { wallMat: THREE.MeshStandardMaterial; floorMat: THREE.MeshStandardMaterial }> = {
       'living-room': {
-        wallMat: new THREE.MeshStandardMaterial({ color: 0xfff8f0, roughness: 0.8, metalness: 0.1 }),
-        floorMat: new THREE.MeshStandardMaterial({ color: 0x8b5a2b, roughness: 0.7, metalness: 0.1 }),
+        wallMat: new THREE.MeshStandardMaterial({ color: 0xf4f4f6, roughness: 0.8, metalness: 0.1 }),
+        floorMat: new THREE.MeshStandardMaterial({ color: 0x5c4232, roughness: 0.7, metalness: 0.1 }),
       },
       kitchen: {
-        wallMat: new THREE.MeshStandardMaterial({ color: 0xf5f5f5, roughness: 0.8, metalness: 0.1 }),
-        floorMat: new THREE.MeshStandardMaterial({ color: 0x808080, roughness: 0.7, metalness: 0.1 }),
+        wallMat: new THREE.MeshStandardMaterial({ color: 0xf0f0f2, roughness: 0.8, metalness: 0.1 }),
+        floorMat: new THREE.MeshStandardMaterial({ color: 0x52525b, roughness: 0.7, metalness: 0.1 }),
       },
       bedroom: {
-        wallMat: new THREE.MeshStandardMaterial({ color: 0xe8eef2, roughness: 0.8, metalness: 0.1 }),
-        floorMat: new THREE.MeshStandardMaterial({ color: 0x5a4a42, roughness: 0.7, metalness: 0.1 }),
+        wallMat: new THREE.MeshStandardMaterial({ color: 0xe4e4e7, roughness: 0.8, metalness: 0.1 }),
+        floorMat: new THREE.MeshStandardMaterial({ color: 0x483a34, roughness: 0.7, metalness: 0.1 }),
       },
       bathroom: {
-        wallMat: new THREE.MeshStandardMaterial({ color: 0xe0f0ea, roughness: 0.8, metalness: 0.1 }),
-        floorMat: new THREE.MeshStandardMaterial({ color: 0xd0d0d0, roughness: 0.7, metalness: 0.1 }),
+        wallMat: new THREE.MeshStandardMaterial({ color: 0xe4e4e7, roughness: 0.8, metalness: 0.1 }),
+        floorMat: new THREE.MeshStandardMaterial({ color: 0x71717a, roughness: 0.7, metalness: 0.1 }),
       },
       hallway: {
-        wallMat: new THREE.MeshStandardMaterial({ color: 0xf0efe8, roughness: 0.8, metalness: 0.1 }),
-        floorMat: new THREE.MeshStandardMaterial({ color: 0x3d3d3d, roughness: 0.7, metalness: 0.1 }),
+        wallMat: new THREE.MeshStandardMaterial({ color: 0xf4f4f6, roughness: 0.8, metalness: 0.1 }),
+        floorMat: new THREE.MeshStandardMaterial({ color: 0x3f3f46, roughness: 0.7, metalness: 0.1 }),
       },
       boardroom: {
-        wallMat: new THREE.MeshStandardMaterial({ color: 0xfaf5ed, roughness: 0.8, metalness: 0.1 }),
-        floorMat: new THREE.MeshStandardMaterial({ color: 0x3e2723, roughness: 0.7, metalness: 0.1 }),
+        wallMat: new THREE.MeshStandardMaterial({ color: 0xfafafa, roughness: 0.8, metalness: 0.1 }),
+        floorMat: new THREE.MeshStandardMaterial({ color: 0x3b2a24, roughness: 0.7, metalness: 0.1 }),
       },
       workstation: {
-        wallMat: new THREE.MeshStandardMaterial({ color: 0xedf2f7, roughness: 0.8, metalness: 0.1 }),
-        floorMat: new THREE.MeshStandardMaterial({ color: 0x4a5568, roughness: 0.7, metalness: 0.1 }),
+        wallMat: new THREE.MeshStandardMaterial({ color: 0xf4f4f6, roughness: 0.8, metalness: 0.1 }),
+        floorMat: new THREE.MeshStandardMaterial({ color: 0x474750, roughness: 0.7, metalness: 0.1 }),
       },
       terrace: {
-        wallMat: new THREE.MeshStandardMaterial({ color: 0xf4efe6, roughness: 0.8, metalness: 0.1 }),
-        floorMat: new THREE.MeshStandardMaterial({ color: 0x2b2b2b, roughness: 0.7, metalness: 0.1 }),
+        wallMat: new THREE.MeshStandardMaterial({ color: 0xe4e4e7, roughness: 0.8, metalness: 0.1 }),
+        floorMat: new THREE.MeshStandardMaterial({ color: 0x303038, roughness: 0.7, metalness: 0.1 }),
       },
+    };
+
+    // Store base material opacity info for recursive fading
+    const tagMaterialBase = (mat: THREE.Material) => {
+      mat.userData = mat.userData || {};
+      mat.userData.baseOpacity = mat.opacity;
+      mat.userData.originallyTransparent = mat.transparent;
     };
 
     // --- 8. Building Hierarchy ---
@@ -572,31 +656,74 @@ export const OfficeModel3D: React.FC<OfficeModel3DProps> = ({
     root.add(rightWing);
     root.add(organicCanopy);
 
+    // Ground Floor Concrete Slab & Highlighting
+    const groundSlabMat = new THREE.MeshStandardMaterial({
+      color: 0x2e2e38,
+      roughness: 0.8,
+      metalness: 0.2,
+    });
+    tagMaterialBase(groundSlabMat);
+    const groundSlab = new THREE.Mesh(new THREE.BoxGeometry(29.6, 0.4, 17.6), groundSlabMat);
+    groundSlab.position.set(0, 0.2, 0);
+    groundSlab.receiveShadow = true;
+    groundFloor.add(groundSlab);
+
+    // Floor 1 Boundary & Floor Plane Highlights (Electric Copper)
     const f1Points = [
-      new THREE.Vector3(-14.5, 0.4, -8.5),
-      new THREE.Vector3(14.5, 0.4, -8.5),
-      new THREE.Vector3(14.5, 0.4, 8.5),
-      new THREE.Vector3(-14.5, 0.4, 8.5),
-      new THREE.Vector3(-14.5, 0.4, -8.5),
+      new THREE.Vector3(-14.6, 0.42, -8.6),
+      new THREE.Vector3(14.6, 0.42, -8.6),
+      new THREE.Vector3(14.6, 0.42, 8.6),
+      new THREE.Vector3(-14.6, 0.42, 8.6),
+      new THREE.Vector3(-14.6, 0.42, -8.6),
     ];
     const floor1Highlight = new THREE.Line(
       new THREE.BufferGeometry().setFromPoints(f1Points),
-      new THREE.LineBasicMaterial({ color: 0xf59e0b, transparent: true, opacity: 0 }),
+      new THREE.LineBasicMaterial({ color: 0xe06d3b, transparent: true, opacity: 0 }),
     );
     groundFloor.add(floor1Highlight);
 
+    const f1PlaneGeo = new THREE.PlaneGeometry(29.2, 17.2);
+    const f1PlaneMat = new THREE.MeshBasicMaterial({
+      color: 0xf07e48,
+      transparent: true,
+      opacity: 0,
+      side: THREE.DoubleSide,
+    });
+    const floor1PlaneHighlight = new THREE.Mesh(f1PlaneGeo, f1PlaneMat);
+    floor1PlaneHighlight.rotation.x = -Math.PI / 2;
+    floor1PlaneHighlight.position.set(0, 0.39, 0);
+    groundFloor.add(floor1PlaneHighlight);
+
+    // Floor 2 Boundary & Floor Plane Highlights (Electric Copper)
     const f2Points = [
-      new THREE.Vector3(-14.5, 3.4, -8.5),
-      new THREE.Vector3(14.5, 3.4, -8.5),
-      new THREE.Vector3(14.5, 3.4, 8.5),
-      new THREE.Vector3(-14.5, 3.4, 8.5),
-      new THREE.Vector3(-14.5, 3.4, -8.5),
+      new THREE.Vector3(-14.6, 3.4, -8.6),
+      new THREE.Vector3(14.6, 3.4, -8.6),
+      new THREE.Vector3(14.6, 3.4, 8.6),
+      new THREE.Vector3(-14.6, 3.4, 8.6),
+      new THREE.Vector3(-14.6, 3.4, -8.6),
     ];
     const floor2Highlight = new THREE.Line(
       new THREE.BufferGeometry().setFromPoints(f2Points),
-      new THREE.LineBasicMaterial({ color: 0x38bdf8, transparent: true, opacity: 0 }),
+      new THREE.LineBasicMaterial({ color: 0xff8a50, transparent: true, opacity: 0 }),
     );
     upperFloor.add(floor2Highlight);
+
+    const f2PlaneGeo = new THREE.PlaneGeometry(29.2, 17.2);
+    const f2PlaneMat = new THREE.MeshBasicMaterial({
+      color: 0xf07e48,
+      transparent: true,
+      opacity: 0,
+      side: THREE.DoubleSide,
+    });
+    const floor2PlaneHighlight = new THREE.Mesh(f2PlaneGeo, f2PlaneMat);
+    floor2PlaneHighlight.rotation.x = -Math.PI / 2;
+    floor2PlaneHighlight.position.set(0, 3.39, 0);
+    upperFloor.add(floor2PlaneHighlight);
+
+    const floorFocusLight = new THREE.SpotLight(0xfff2e6, 0, 50, Math.PI / 3, 0.45, 1.2);
+    floorFocusLight.position.set(0, 24, 0);
+    scene.add(floorFocusLight);
+    scene.add(floorFocusLight.target);
 
     const roomLights: Record<string, THREE.PointLight> = {};
     const roomMarkers: Record<string, THREE.Mesh> = {};
@@ -620,6 +747,8 @@ export const OfficeModel3D: React.FC<OfficeModel3DProps> = ({
       floorGroup.add(cabinGroup);
 
       const mats = roomMaterials[cabinId] || roomMaterials['living-room'];
+      tagMaterialBase(mats.floorMat);
+      tagMaterialBase(mats.wallMat);
 
       const floorTile = new THREE.Mesh(
         new THREE.BoxGeometry(w - 0.1, 0.1, d - 0.1),
@@ -630,10 +759,10 @@ export const OfficeModel3D: React.FC<OfficeModel3DProps> = ({
       cabinGroup.add(floorTile);
 
       const occCount = cabins[cabinId]?.metrics.occupancy || 0;
-      let heatHex = '#3b82f6';
-      if (occCount >= 4) heatHex = '#ef4444';
-      else if (occCount >= 2) heatHex = '#f59e0b';
-      else if (occCount === 1) heatHex = '#06b6d4';
+      let heatHex = '#4a4a55';
+      if (occCount >= 4) heatHex = '#e03b24';
+      else if (occCount >= 2) heatHex = '#e06d3b';
+      else if (occCount === 1) heatHex = '#b87355';
 
       const heatMat = new THREE.MeshBasicMaterial({
         map: createRadialHeatTexture(heatHex),
@@ -668,225 +797,151 @@ export const OfficeModel3D: React.FC<OfficeModel3DProps> = ({
       cabinGroup.add(sideWallPart);
 
       const smartGlassMat = new THREE.MeshStandardMaterial({
-        color: 0xbad7f2,
+        color: 0x8c7264,
         roughness: 0.1,
         metalness: 0.1,
         transparent: true,
         opacity: cabins[cabinId]?.components.smartGlass ? 0.95 : 0.35,
       });
+      tagMaterialBase(smartGlassMat);
       smartGlasses[cabinId] = smartGlassMat;
 
       const glassWall = new THREE.Mesh(
         new THREE.BoxGeometry(wallThick, h * 0.85, d * 0.65),
         smartGlassMat,
       );
-      glassWall.position.set(w / 2 - wallThick / 2, (h * 0.85) / 2, 0);
+      glassWall.position.set(w / 2 - wallThick / 2, h * 0.85 / 2, -d * 0.15);
+      glassWall.castShadow = true;
       cabinGroup.add(glassWall);
 
-      // --- Schneider GridSense Ceiling Multi-Sensor Pod with High-Contrast Golden Glow Emission ---
-      const sensorPod = new THREE.Group();
-      sensorPod.position.set(0, h - 0.08, 0);
+      // Cabin Ceiling Light
+      const pLight = new THREE.PointLight(0xfff2e6, cabins[cabinId]?.components.lights ? 5.2 : 0, 18, 1.4);
+      pLight.position.set(0, h - 0.25, 0);
+      cabinGroup.add(pLight);
+      roomLights[cabinId] = pLight;
 
-      const sensorBody = new THREE.Mesh(
-        new THREE.CylinderGeometry(0.36, 0.36, 0.08, 24),
-        new THREE.MeshStandardMaterial({ color: 0x05070a, roughness: 0.15, metalness: 0.85 }),
-      );
-      sensorPod.add(sensorBody);
-
-      // Gold Bezel Ring
-      const sensorRing = new THREE.Mesh(
-        new THREE.TorusGeometry(0.37, 0.03, 16, 32),
-        goldMat,
-      );
-      sensorRing.rotation.x = Math.PI / 2;
-      sensorPod.add(sensorRing);
-
-      // High-Contrast 'Golden Glow' Core Shader Material
-      const sensorCoreMat = new THREE.MeshStandardMaterial({
-        color: 0xffd700,
-        emissive: 0xffa500, // Vibrant Golden Glow
-        emissiveIntensity: 2.2, // Clearly visible against dark housing
-        roughness: 0.1,
-        metalness: 0.8,
+      // Status Indicator Sensor Beacon (Electric Copper)
+      const markerMat = new THREE.MeshStandardMaterial({
+        color: cabins[cabinId]?.components.lights ? 0xe06d3b : 0x3a302a,
+        emissive: cabins[cabinId]?.components.lights ? 0xff8a50 : 0x1a120c,
+        emissiveIntensity: cabins[cabinId]?.components.lights ? 2.4 : 0.2,
+        roughness: 0.2,
       });
-      const ledGlow = new THREE.Mesh(
-        new THREE.SphereGeometry(0.12, 16, 16),
-        sensorCoreMat,
-      );
-      ledGlow.position.set(0, -0.06, 0);
-      ledGlow.scale.set(1, 0.6, 1);
-      sensorPod.add(ledGlow);
-      roomMarkers[cabinId] = ledGlow;
+      tagMaterialBase(markerMat);
+      const marker = new THREE.Mesh(new THREE.CylinderGeometry(0.22, 0.22, 0.08, 16), markerMat);
+      marker.position.set(0, h - 0.04, 0);
+      cabinGroup.add(marker);
+      roomMarkers[cabinId] = marker;
 
-      // Radiant Golden Downlight Emitter
-      const sensorGlowLight = new THREE.PointLight(0xffb800, 1.6, 4.5, 2.0);
-      sensorGlowLight.position.set(0, -0.1, 0);
-      sensorPod.add(sensorGlowLight);
-
-      cabinGroup.add(sensorPod);
-
-      // Room Point Light (User toggles with maximum contrast)
-      const isLit = cabins[cabinId]?.components.lights ?? true;
-      const roomLight = new THREE.PointLight(
-        isLit ? 0xfff6d6 : 0x000000,
-        isLit ? 5.2 : 0.0,
-        18,
-      );
-      roomLight.position.set(0, h - 0.35, 0);
-      roomLight.castShadow = true;
-      roomLight.shadow.bias = -0.001;
-      cabinGroup.add(roomLight);
-      roomLights[cabinId] = roomLight;
-
-      // Furniture
-      if (cabinId === 'living-room') {
-        const sofa = new THREE.Mesh(
-          new THREE.BoxGeometry(3.0, 0.5, 1.2),
-          new THREE.MeshStandardMaterial({ color: 0x232630, roughness: 0.7 }),
-        );
-        sofa.position.set(0, 0.25, 0.8);
-        sofa.castShadow = true;
-        cabinGroup.add(sofa);
-      } else if (cabinId === 'kitchen') {
-        const island = new THREE.Mesh(
-          new THREE.BoxGeometry(3.2, 0.9, 1.2),
-          new THREE.MeshStandardMaterial({ color: 0xe8e5df, roughness: 0.4 }),
-        );
-        island.position.set(0, 0.45, 0);
-        island.castShadow = true;
-        cabinGroup.add(island);
-      } else if (cabinId === 'boardroom') {
-        const confTable = new THREE.Mesh(
-          new THREE.BoxGeometry(3.6, 0.8, 1.4),
-          new THREE.MeshStandardMaterial({ color: 0x3a2c22, roughness: 0.5 }),
-        );
-        confTable.position.set(0, 0.4, 0);
-        confTable.castShadow = true;
-        cabinGroup.add(confTable);
-      } else if (cabinId === 'workstation') {
-        const desk = new THREE.Mesh(
-          new THREE.BoxGeometry(3.2, 0.75, 1.2),
-          new THREE.MeshStandardMaterial({ color: 0x2d303a, roughness: 0.6 }),
-        );
-        desk.position.set(0, 0.38, -0.4);
-        desk.castShadow = true;
-        cabinGroup.add(desk);
-      } else if (cabinId === 'bedroom') {
-        const bed = new THREE.Mesh(
-          new THREE.BoxGeometry(2.0, 0.55, 2.4),
-          new THREE.MeshStandardMaterial({ color: 0xd5d9e2, roughness: 0.8 }),
-        );
-        bed.position.set(0.4, 0.28, 0);
-        bed.castShadow = true;
-        cabinGroup.add(bed);
-      }
-
-      const hitBox = new THREE.Mesh(
+      // Invisible Raycast Picker
+      const picker = new THREE.Mesh(
         new THREE.BoxGeometry(w, h, d),
-        new THREE.MeshBasicMaterial({ transparent: true, opacity: 0 }),
+        new THREE.MeshBasicMaterial({ visible: false })
       );
-      hitBox.position.set(0, h / 2, 0);
-      hitBox.userData = { cabinId };
-      cabinGroup.add(hitBox);
-      roomPickers[cabinId] = hitBox;
+      picker.position.set(0, h / 2, 0);
+      picker.userData = { cabinId };
+      cabinGroup.add(picker);
+      roomPickers[cabinId] = picker;
+
+      // Cabin Furniture Props (Desks, Chairs, Pods)
+      const deskMat = new THREE.MeshStandardMaterial({ color: 0x3a3028, roughness: 0.6 });
+      tagMaterialBase(deskMat);
+      const desk = new THREE.Mesh(new THREE.BoxGeometry(w * 0.5, 0.65, d * 0.35), deskMat);
+      desk.position.set(0, 0.33, 0);
+      desk.castShadow = true;
+      desk.receiveShadow = true;
+      cabinGroup.add(desk);
+
+      const chairMat = new THREE.MeshStandardMaterial({ color: 0x222228, roughness: 0.8 });
+      tagMaterialBase(chairMat);
+      const chair = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.8, 0.5), chairMat);
+      chair.position.set(0, 0.4, 0.8);
+      chair.castShadow = true;
+      cabinGroup.add(chair);
     };
 
-    // Floor 1
-    createCabin('living-room', groundFloor, -7.5, 0.35, 4.2, 7.0, 2.9, 5.4);
-    createCabin('kitchen', groundFloor, 7.5, 0.35, 4.2, 7.0, 2.9, 5.4);
-    createCabin('hallway', groundFloor, 0.0, 0.35, 4.2, 6.0, 2.9, 5.4);
-    createCabin('bathroom', groundFloor, -7.5, 0.35, -4.2, 7.0, 2.9, 5.4);
+    // --- Ground Floor Cabins (Floor 1: y = 0.4) ---
+    createCabin('living-room', groundFloor, -7.0, 0.4, 3.8, 12.0, 2.7, 7.2);
+    createCabin('kitchen', groundFloor, 7.0, 0.4, 3.8, 12.0, 2.7, 7.2);
+    createCabin('bedroom', groundFloor, -7.0, 0.4, -4.0, 12.0, 2.7, 6.8);
+    createCabin('bathroom', groundFloor, 7.0, 0.4, -4.0, 12.0, 2.7, 6.8);
 
-    // Floor 2
-    createCabin('boardroom', upperFloor, 7.5, 3.35, 4.2, 7.0, 2.9, 5.4);
-    createCabin('workstation', upperFloor, -7.5, 3.35, 4.2, 7.0, 2.9, 5.4);
-    createCabin('bedroom', upperFloor, -7.5, 3.35, -4.2, 7.0, 2.9, 5.4);
-    createCabin('terrace', upperFloor, 7.5, 3.35, -4.2, 7.0, 2.9, 5.4);
+    // --- Upper Floor Intermediate Slab & Cabins (Floor 2: y = 3.2) ---
+    const upperSlabMat = new THREE.MeshStandardMaterial({
+      color: 0x32323c,
+      roughness: 0.75,
+      metalness: 0.25,
+    });
+    tagMaterialBase(upperSlabMat);
+    const upperSlab = new THREE.Mesh(new THREE.BoxGeometry(29.6, 0.4, 17.6), upperSlabMat);
+    upperSlab.position.set(0, 3.2, 0);
+    upperSlab.castShadow = true;
+    upperSlab.receiveShadow = true;
+    upperFloor.add(upperSlab);
 
-    const slabGeo = new THREE.BoxGeometry(29.0, 0.25, 17.0);
-    const slabMat = new THREE.MeshStandardMaterial({ color: 0xd8d8d8, roughness: 0.8 });
+    createCabin('hallway', upperFloor, -7.0, 3.4, 3.8, 12.0, 2.7, 7.2);
+    createCabin('boardroom', upperFloor, 7.0, 3.4, 3.8, 12.0, 2.7, 7.2);
+    createCabin('workstation', upperFloor, -7.0, 3.4, -4.0, 12.0, 2.7, 6.8);
+    createCabin('terrace', upperFloor, 7.0, 3.4, -4.0, 12.0, 2.7, 6.8);
 
-    const f1Slab = new THREE.Mesh(slabGeo, slabMat);
-    f1Slab.position.set(0, 0.25, 0);
-    f1Slab.receiveShadow = true;
-    groundFloor.add(f1Slab);
+    // --- Ribbon Glazing Facade Walls ---
+    tagMaterialBase(extWallMat);
+    tagMaterialBase(silverCladMat);
+    tagMaterialBase(ribbonGlassMat);
+    tagMaterialBase(copperEnergyMat);
+    tagMaterialBase(titaniumTowerMat);
+    tagMaterialBase(copperTrimMat);
 
-    const f2Slab = new THREE.Mesh(slabGeo, slabMat);
-    f2Slab.position.set(0, 3.25, 0);
-    f2Slab.receiveShadow = true;
-    f2Slab.castShadow = true;
-    upperFloor.add(f2Slab);
-
-    // Front Facade Wall
-    frontWall.position.set(0, 0, 8.4);
-    const fwMesh = new THREE.Mesh(new THREE.BoxGeometry(29.0, 6.2, 0.3), extWallMat);
-    fwMesh.position.set(0, 3.1, 0);
+    // Front Facade
+    const fwMesh = new THREE.Mesh(new THREE.BoxGeometry(29.6, 5.8, 0.3), ribbonGlassMat);
+    fwMesh.position.set(0, 3.3, 0);
     fwMesh.castShadow = true;
-    fwMesh.receiveShadow = true;
     frontWall.add(fwMesh);
+    frontWall.position.set(0, 0, 8.4);
 
-    const ribbonF1 = new THREE.Mesh(new THREE.BoxGeometry(27.0, 1.2, 0.35), ribbonGlassMat);
-    ribbonF1.position.set(0, 2.0, 0);
-    frontWall.add(ribbonF1);
+    // Porte-Cochere Canopy (Front Entrance)
+    const pcMat = new THREE.MeshStandardMaterial({ color: 0x222228, roughness: 0.4, metalness: 0.8 });
+    tagMaterialBase(pcMat);
+    const porteCochere = new THREE.Mesh(new THREE.BoxGeometry(8.5, 0.35, 5.2), pcMat);
+    porteCochere.position.set(0, 3.4, 2.5);
+    porteCochere.castShadow = true;
+    frontWall.add(porteCochere);
 
-    const ribbonF2 = new THREE.Mesh(new THREE.BoxGeometry(27.0, 1.2, 0.35), ribbonGlassMat);
-    ribbonF2.position.set(0, 4.8, 0);
-    frontWall.add(ribbonF2);
+    const pcPillar1 = new THREE.Mesh(new THREE.CylinderGeometry(0.18, 0.18, 3.2, 16), copperTrimMat);
+    pcPillar1.position.set(-3.8, 1.6, 4.8);
+    pcPillar1.castShadow = true;
+    frontWall.add(pcPillar1);
 
-    const canopyMat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.3, metalness: 0.8 });
-    const canopyMesh = new THREE.Mesh(new THREE.BoxGeometry(8.2, 0.3, 5.5), canopyMat);
-    canopyMesh.position.set(0, 3.4, 2.8);
-    canopyMesh.castShadow = true;
-    frontWall.add(canopyMesh);
+    const pcPillar2 = new THREE.Mesh(new THREE.CylinderGeometry(0.18, 0.18, 3.2, 16), copperTrimMat);
+    pcPillar2.position.set(3.8, 1.6, 4.8);
+    pcPillar2.castShadow = true;
+    frontWall.add(pcPillar2);
 
-    const pillarMat = new THREE.MeshStandardMaterial({ color: 0x333333, roughness: 0.5 });
-    const p1 = new THREE.Mesh(new THREE.CylinderGeometry(0.18, 0.18, 3.4, 16), pillarMat);
-    p1.position.set(-3.6, 1.7, 5.0);
-    p1.castShadow = true;
-    frontWall.add(p1);
-
-    const p2 = new THREE.Mesh(new THREE.CylinderGeometry(0.18, 0.18, 3.4, 16), pillarMat);
-    p2.position.set(3.6, 1.7, 5.0);
-    p2.castShadow = true;
-    frontWall.add(p2);
-
-    // Back Facade Wall
-    backWall.position.set(0, 0, -8.4);
-    const bwMesh = new THREE.Mesh(new THREE.BoxGeometry(29.0, 6.2, 0.3), extWallMat);
-    bwMesh.position.set(0, 3.1, 0);
+    // Back Facade
+    const bwMesh = new THREE.Mesh(new THREE.BoxGeometry(29.6, 5.8, 0.3), extWallMat);
+    bwMesh.position.set(0, 3.3, 0);
     bwMesh.castShadow = true;
-    bwMesh.receiveShadow = true;
     backWall.add(bwMesh);
+    backWall.position.set(0, 0, -8.4);
 
-    const ribbonBackF1 = new THREE.Mesh(new THREE.BoxGeometry(27.0, 1.2, 0.35), ribbonGlassMat);
-    ribbonBackF1.position.set(0, 2.0, 0);
-    backWall.add(ribbonBackF1);
-
-    const ribbonBackF2 = new THREE.Mesh(new THREE.BoxGeometry(27.0, 1.2, 0.35), ribbonGlassMat);
-    ribbonBackF2.position.set(0, 4.8, 0);
-    backWall.add(ribbonBackF2);
-
-    // Left Facade Wing
-    leftWing.position.set(-14.4, 0, 0);
-    const lwMesh = new THREE.Mesh(new THREE.BoxGeometry(0.3, 6.2, 17.0), extWallMat);
-    lwMesh.position.set(0, 3.1, 0);
+    // Left Wing (Solid Clad & Ribbon Glass)
+    const lwMesh = new THREE.Mesh(new THREE.BoxGeometry(0.4, 5.8, 17.6), silverCladMat);
+    lwMesh.position.set(0, 3.3, 0);
     lwMesh.castShadow = true;
-    lwMesh.receiveShadow = true;
     leftWing.add(lwMesh);
+    leftWing.position.set(-14.4, 0, 0);
 
-    // Right Facade Wing + Green Eco-Cylinder Towers
+    // Right Wing (Eco-Towers / Vertical Energy Hub)
     rightWing.position.set(14.4, 0, 0);
-    const rwMesh = new THREE.Mesh(new THREE.BoxGeometry(0.3, 6.2, 17.0), extWallMat);
-    rwMesh.position.set(0, 3.1, 0);
+    const rwMesh = new THREE.Mesh(new THREE.BoxGeometry(0.4, 5.8, 17.6), silverCladMat);
+    rwMesh.position.set(0, 3.3, 0);
     rwMesh.castShadow = true;
-    rwMesh.receiveShadow = true;
     rightWing.add(rwMesh);
 
     for (let i = 0; i < 4; i++) {
       const ecoGroup = new THREE.Group();
       ecoGroup.position.set(1.4, 2.2, -5.0 + i * 3.3);
 
-      // Aerospace Titanium Cylinder
       const cylinder = new THREE.Mesh(
         new THREE.CylinderGeometry(0.85, 0.85, 4.5, 32),
         titaniumTowerMat,
@@ -895,18 +950,18 @@ export const OfficeModel3D: React.FC<OfficeModel3DProps> = ({
       cylinder.receiveShadow = true;
       ecoGroup.add(cylinder);
 
-      // Brushed 24K Solar Gold Cap (ZERO green!)
+      // Electric Copper Cap
       const cap = new THREE.Mesh(
         new THREE.CylinderGeometry(0.92, 0.92, 0.25, 32),
-        goldMat,
+        copperTrimMat,
       );
       cap.position.y = 2.3;
       ecoGroup.add(cap);
 
-      // Electric Cyan Conduit Glow Ring
+      // Electric Copper Conduit Glow Ring
       const conduitRing = new THREE.Mesh(
         new THREE.TorusGeometry(0.88, 0.035, 16, 32),
-        cyanEnergyMat,
+        copperEnergyMat,
       );
       conduitRing.rotation.x = Math.PI / 2;
       conduitRing.position.y = 1.6;
@@ -916,22 +971,21 @@ export const OfficeModel3D: React.FC<OfficeModel3DProps> = ({
     }
 
     // --- Architectural Upper Roof & Mechanical Plant ---
-    // When collapsed (t = 0), sits at y = 6.25, completely capping Floor 2 rooms and exterior walls
     roof.position.set(0, 6.25, 0);
 
-    // 1. Main Roof Deck Slab
     const mainRoofMesh = new THREE.Mesh(new THREE.BoxGeometry(29.6, 0.35, 17.6), extRoofMat);
     mainRoofMesh.position.set(0, 0.175, 0);
     mainRoofMesh.castShadow = true;
     mainRoofMesh.receiveShadow = true;
     roof.add(mainRoofMesh);
 
-    // 2. Continuous Perimeter Parapet Coping
     const parapetMat = new THREE.MeshStandardMaterial({
-      color: 0x1a2233,
+      color: 0x2a2a32,
       roughness: 0.45,
       metalness: 0.8,
     });
+    tagMaterialBase(parapetMat);
+
     const pFront = new THREE.Mesh(new THREE.BoxGeometry(29.6, 0.45, 0.3), parapetMat);
     pFront.position.set(0, 0.4, 8.65);
     pFront.castShadow = true;
@@ -952,20 +1006,22 @@ export const OfficeModel3D: React.FC<OfficeModel3DProps> = ({
     pRight.castShadow = true;
     roof.add(pRight);
 
-    // Gold Coping Trim along the parapet tops
-    const trimF = new THREE.Mesh(new THREE.BoxGeometry(29.7, 0.08, 0.36), goldMat);
+    // Copper Coping Trim along parapets
+    const trimF = new THREE.Mesh(new THREE.BoxGeometry(29.7, 0.08, 0.36), copperTrimMat);
     trimF.position.set(0, 0.64, 8.65);
     roof.add(trimF);
-    const trimB = new THREE.Mesh(new THREE.BoxGeometry(29.7, 0.08, 0.36), goldMat);
+    const trimB = new THREE.Mesh(new THREE.BoxGeometry(29.7, 0.08, 0.36), copperTrimMat);
     trimB.position.set(0, 0.64, -8.65);
     roof.add(trimB);
 
-    // 3. High-Efficiency Photovoltaic Solar Arrays
+    // Photovoltaic Solar Arrays
     const solarPanelMat = new THREE.MeshStandardMaterial({
-      color: 0x0c1e3d,
+      color: 0x1f1f26,
       roughness: 0.15,
       metalness: 0.9,
     });
+    tagMaterialBase(solarPanelMat);
+
     for (let row = 0; row < 2; row++) {
       for (let col = 0; col < 3; col++) {
         const panel = new THREE.Mesh(new THREE.BoxGeometry(3.6, 0.08, 2.2), solarPanelMat);
@@ -974,7 +1030,7 @@ export const OfficeModel3D: React.FC<OfficeModel3DProps> = ({
         panel.castShadow = true;
         roof.add(panel);
 
-        const frame = new THREE.Mesh(new THREE.BoxGeometry(3.7, 0.04, 2.3), goldMat);
+        const frame = new THREE.Mesh(new THREE.BoxGeometry(3.7, 0.04, 2.3), copperTrimMat);
         frame.position.copy(panel.position);
         frame.position.y -= 0.03;
         frame.rotation.copy(panel.rotation);
@@ -982,21 +1038,23 @@ export const OfficeModel3D: React.FC<OfficeModel3DProps> = ({
       }
     }
 
-    // 4. Central Architectural Skylight Atrium
+    // Central Skylight Atrium
     const skylightGlassMat = new THREE.MeshPhysicalMaterial({
-      color: 0x1e3a5f,
+      color: 0x282830,
       transmission: 0.85,
       opacity: 0.9,
       transparent: true,
       roughness: 0.05,
       metalness: 0.1,
     });
+    tagMaterialBase(skylightGlassMat);
     const skylight = new THREE.Mesh(new THREE.BoxGeometry(7.2, 0.3, 4.8), skylightGlassMat);
     skylight.position.set(0, 0.4, -3.2);
     roof.add(skylight);
 
-    // 5. HVAC Chiller Units
-    const chillerMat = new THREE.MeshStandardMaterial({ color: 0x475569, roughness: 0.4, metalness: 0.5 });
+    // HVAC Chillers
+    const chillerMat = new THREE.MeshStandardMaterial({ color: 0x3a3a44, roughness: 0.4, metalness: 0.5 });
+    tagMaterialBase(chillerMat);
     for (let c = 0; c < 3; c++) {
       const chiller = new THREE.Mesh(new THREE.BoxGeometry(2.8, 1.2, 1.8), chillerMat);
       chiller.position.set(5.5 + c * 3.2, 0.95, -4.5);
@@ -1004,7 +1062,7 @@ export const OfficeModel3D: React.FC<OfficeModel3DProps> = ({
       roof.add(chiller);
     }
 
-    // 6. Communications & Lightning Arrester Mast with Gold/Amber Beacon
+    // Lightning Arrester Mast with Copper Beacon
     const mastMesh = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.14, 4.5, 16), titaniumTowerMat);
     mastMesh.position.set(11.0, 2.6, 2.0);
     mastMesh.castShadow = true;
@@ -1012,7 +1070,7 @@ export const OfficeModel3D: React.FC<OfficeModel3DProps> = ({
 
     const mastBeacon = new THREE.Mesh(
       new THREE.SphereGeometry(0.18, 16, 16),
-      new THREE.MeshStandardMaterial({ color: 0xffd700, emissive: 0xffa500, emissiveIntensity: 2.8 })
+      new THREE.MeshStandardMaterial({ color: 0xff8a50, emissive: 0xe06d3b, emissiveIntensity: 2.8 })
     );
     mastBeacon.position.set(11.0, 4.9, 2.0);
     roof.add(mastBeacon);
@@ -1036,7 +1094,10 @@ export const OfficeModel3D: React.FC<OfficeModel3DProps> = ({
       organicCanopy,
       assembledGlowLine,
       floor1Highlight,
+      floor1PlaneHighlight,
       floor2Highlight,
+      floor2PlaneHighlight,
+      floorFocusLight,
       sunLight,
       ambientLight,
       hemiLight,
@@ -1077,40 +1138,32 @@ export const OfficeModel3D: React.FC<OfficeModel3DProps> = ({
       mouse.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
       mouse.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
 
-      raycaster.setFromCamera(mouse, camera);
-      const pickables = Object.values(roomPickers);
-      const intersects = raycaster.intersectObjects(pickables, false);
+      if (onHoverFloor) {
+        raycaster.setFromCamera(mouse, camera);
+        const pickables = Object.values(roomPickers);
+        const intersects = raycaster.intersectObjects(pickables, false);
 
-      if (intersects.length > 0) {
-        const hit = intersects[0].object;
-        const cabinId = hit.userData.cabinId as string;
-        const cabin = cabins[cabinId];
-        if (cabin) {
-          const fl = cabin.floor;
-          if (groupsRef.current) {
-            (groupsRef.current.floor1Highlight.material as THREE.LineBasicMaterial).opacity =
-              fl === 1 ? 0.95 : 0;
-            (groupsRef.current.floor2Highlight.material as THREE.LineBasicMaterial).opacity =
-              fl === 2 ? 0.95 : 0;
+        if (intersects.length > 0) {
+          const hit = intersects[0].object;
+          const cabinId = hit.userData.cabinId as string;
+          const cabin = cabins[cabinId];
+          if (cabin) {
+            onHoverFloor({
+              floor: cabin.floor,
+              x: event.clientX,
+              y: event.clientY,
+            });
+            return;
           }
-          onHoverFloor?.({ floor: fl, x: event.clientX, y: event.clientY });
-          return;
         }
+        onHoverFloor(null);
       }
-
-      if (groupsRef.current) {
-        (groupsRef.current.floor1Highlight.material as THREE.LineBasicMaterial).opacity = 0;
-        (groupsRef.current.floor2Highlight.material as THREE.LineBasicMaterial).opacity = 0;
-      }
-      onHoverFloor?.(null);
     };
 
     const handleMouseLeave = () => {
-      if (groupsRef.current) {
-        (groupsRef.current.floor1Highlight.material as THREE.LineBasicMaterial).opacity = 0;
-        (groupsRef.current.floor2Highlight.material as THREE.LineBasicMaterial).opacity = 0;
+      if (onHoverFloor) {
+        onHoverFloor(null);
       }
-      onHoverFloor?.(null);
     };
 
     renderer.domElement.addEventListener('click', handleClick);
@@ -1119,39 +1172,74 @@ export const OfficeModel3D: React.FC<OfficeModel3DProps> = ({
 
     onModelLoaded();
 
-    // --- 10. Animation Loop ---
+    // --- 10. Animation Loop with Organic Spring Physics ---
     let animationFrameId: number;
-    const startTime = performance.now();
+    const clock = new THREE.Clock();
+
+    // Helper to recursively modulate group opacity for fading non-selected floors
+    const applyGroupFade = (group: THREE.Group, opacityMultiplier: number, excludeMesh?: THREE.Mesh) => {
+      group.traverse((obj) => {
+        if (obj instanceof THREE.Mesh && obj !== excludeMesh) {
+          if (obj.material) {
+            if (Array.isArray(obj.material)) {
+              obj.material.forEach((m) => {
+                const base = (m.userData && m.userData.baseOpacity !== undefined) ? m.userData.baseOpacity : 1.0;
+                const newOp = base * opacityMultiplier;
+                m.transparent = newOp < 0.98 || (m.userData && m.userData.originallyTransparent);
+                m.opacity = newOp;
+              });
+            } else {
+              const m = obj.material;
+              const base = (m.userData && m.userData.baseOpacity !== undefined) ? m.userData.baseOpacity : 1.0;
+              const newOp = base * opacityMultiplier;
+              m.transparent = newOp < 0.98 || (m.userData && m.userData.originallyTransparent);
+              m.opacity = newOp;
+            }
+          }
+        }
+      });
+    };
 
     const animate = () => {
       animationFrameId = requestAnimationFrame(animate);
-      const elapsedTime = (performance.now() - startTime) / 1000;
+      const delta = Math.min(0.033, clock.getDelta());
+      const elapsedTime = clock.getElapsedTime();
 
-      const anim = animStateRef.current;
-      anim.currentExpansion += (anim.targetExpansion - anim.currentExpansion) * 0.075;
-      const t = anim.currentExpansion;
+      const targets = animTargetsRef.current;
+      const springs = springsRef.current;
+
+      // 1. Step Spring Physics
+      updateSpring(springs.expansion, targets.targetExpansion, 110, 16, delta);
+      updateSpring(springs.upperLift, targets.targetUpperLift, 130, 18, delta);
+      updateSpring(springs.roofLift, targets.targetRoofLift, 130, 18, delta);
+      updateSpring(springs.groundOpacity, targets.targetGroundOpacity, 120, 16, delta);
+      updateSpring(springs.upperOpacity, targets.targetUpperOpacity, 120, 16, delta);
+      updateSpring(springs.floor1Highlight, targets.targetFloor1Highlight, 140, 16, delta);
+      updateSpring(springs.floor2Highlight, targets.targetFloor2Highlight, 140, 16, delta);
+      updateSpring(springs.cameraY, targets.cameraTargetY, 90, 15, delta);
+      updateSpring(springs.cameraDist, targets.cameraTargetDistance, 80, 15, delta);
+
+      const t = springs.expansion.current;
 
       // Camera view transition
-      if (anim.isExpanded) {
+      if (targets.isExpanded) {
         const expandedCamPos = new THREE.Vector3(20, 34, 42);
         camera.position.lerp(expandedCamPos, 0.05);
         controls.target.lerp(new THREE.Vector3(0, 4.8, 0), 0.05);
-      } else if (anim.isIsometric) {
+      } else if (targets.isIsometric) {
         const isoTarget = new THREE.Vector3(28, 42, 28);
         camera.position.lerp(isoTarget, 0.06);
         controls.target.lerp(new THREE.Vector3(0, 3.2, 0), 0.06);
-      } else if (anim.transitioningPerspective) {
+      } else if (targets.transitioningPerspective) {
         const defTarget = new THREE.Vector3(24, 20, 36);
         camera.position.lerp(defTarget, 0.06);
       } else {
-        anim.cameraCurrentY += (anim.cameraTargetY - anim.cameraCurrentY) * 0.05;
-        controls.target.y = anim.cameraCurrentY;
+        controls.target.y = springs.cameraY.current;
 
         const currentDist = camera.position.distanceTo(controls.target);
-        if (Math.abs(currentDist - anim.cameraTargetDistance) > 0.2) {
+        if (Math.abs(currentDist - springs.cameraDist.current) > 0.1) {
           const dir = new THREE.Vector3().subVectors(camera.position, controls.target).normalize();
-          const nextDist = currentDist + (anim.cameraTargetDistance - currentDist) * 0.05;
-          camera.position.copy(controls.target).addScaledVector(dir, nextDist);
+          camera.position.copy(controls.target).addScaledVector(dir, springs.cameraDist.current);
         }
       }
 
@@ -1168,20 +1256,21 @@ export const OfficeModel3D: React.FC<OfficeModel3DProps> = ({
       }
 
       // Thunderstorm random lightning flash simulation
-      if (anim.weatherCondition === 'thunderstorm') {
-        anim.thunderTimer += 0.016;
-        if (anim.thunderTimer > 6.0 && Math.random() < 0.035) {
+      if (targets.weatherCondition === 'thunderstorm') {
+        targets.thunderTimer += delta;
+        if (targets.thunderTimer > 6.0 && Math.random() < 0.035) {
           ambientLight.intensity = 2.4;
           setTimeout(() => {
             ambientLight.intensity = 0.6;
           }, 70);
-          anim.thunderTimer = 0;
+          targets.thunderTimer = 0;
         }
       }
 
-      // Apply kinetic multi-tier exploded transformations
+      // Apply kinetic multi-tier spring transformations & floor isolation fading
       if (groupsRef.current) {
         const {
+          groundFloor,
           upperFloor,
           roof,
           extRoofMat,
@@ -1191,23 +1280,69 @@ export const OfficeModel3D: React.FC<OfficeModel3DProps> = ({
           rightWing,
           organicCanopy,
           assembledGlowLine,
+          floor1Highlight,
+          floor1PlaneHighlight,
+          floor2Highlight,
+          floor2PlaneHighlight,
+          floorFocusLight,
           roomMarkers,
           heatmapPlanes,
         } = groupsRef.current;
 
-        // When collapsed (t=0), upperFloor sits cleanly at y=0 and roof sits at y=6.25 covering Floor 2 completely
-        upperFloor.position.y = t * 8.2;
-        roof.position.y = 6.25 + t * 15.5;
+        // Apply smooth spring vertical offsets
+        upperFloor.position.y = t * 8.2 + springs.upperLift.current;
+        roof.position.y = 6.25 + t * 15.5 + springs.roofLift.current;
         roof.rotation.x = -t * 0.04;
         roof.rotation.z = t * 0.02;
 
+        // Apply smooth spring fading to non-selected floors
+        if (!targets.isExpanded) {
+          applyGroupFade(groundFloor, springs.groundOpacity.current, floor1PlaneHighlight);
+          applyGroupFade(upperFloor, springs.upperOpacity.current, floor2PlaneHighlight);
+        } else {
+          applyGroupFade(groundFloor, 1.0);
+          applyGroupFade(upperFloor, 1.0);
+        }
+
+        // Roof fading during floor isolation
         if (extRoofMat) {
-          if (anim.activeFloor === 2 && !anim.isExpanded) {
+          if ((targets.activeFloor === 2 || targets.activeFloor === 1) && !targets.isExpanded) {
             extRoofMat.transparent = true;
-            extRoofMat.opacity = 0.25;
+            extRoofMat.opacity = 0.12;
           } else {
             extRoofMat.transparent = false;
             extRoofMat.opacity = 1.0;
+          }
+        }
+
+        // Active Floor Highlights with rhythmic breathing pulse (Electric Copper)
+        const pulse = 0.8 + 0.2 * Math.sin(elapsedTime * 4.5);
+        if (floor1Highlight && floor1PlaneHighlight) {
+          (floor1Highlight.material as THREE.LineBasicMaterial).opacity =
+            springs.floor1Highlight.current * pulse * 0.95;
+          (floor1PlaneHighlight.material as THREE.MeshBasicMaterial).opacity =
+            springs.floor1Highlight.current * pulse * 0.38;
+        }
+
+        if (floor2Highlight && floor2PlaneHighlight) {
+          (floor2Highlight.material as THREE.LineBasicMaterial).opacity =
+            springs.floor2Highlight.current * pulse * 0.95;
+          (floor2PlaneHighlight.material as THREE.MeshBasicMaterial).opacity =
+            springs.floor2Highlight.current * pulse * 0.38;
+        }
+
+        // Dedicated directional Level Focus Light
+        if (floorFocusLight) {
+          if (targets.activeFloor === 1) {
+            floorFocusLight.target.position.set(0, 1.0, 0);
+            floorFocusLight.position.set(0, 20, 4);
+            floorFocusLight.intensity = springs.floor1Highlight.current * 3.5;
+          } else if (targets.activeFloor === 2) {
+            floorFocusLight.target.position.set(0, 4.5, 0);
+            floorFocusLight.position.set(0, 24, 4);
+            floorFocusLight.intensity = springs.floor2Highlight.current * 3.5;
+          } else {
+            floorFocusLight.intensity = 0;
           }
         }
 
@@ -1220,22 +1355,22 @@ export const OfficeModel3D: React.FC<OfficeModel3DProps> = ({
         rightWing.position.x = 14.4 + t * 9.0;
 
         if (assembledGlowLine) {
-          if (!anim.isExpanded) {
-            const pulse = 0.35 + 0.35 * Math.sin(elapsedTime * 2.2);
-            (assembledGlowLine.material as THREE.LineBasicMaterial).opacity = pulse;
+          if (!targets.isExpanded) {
+            const pulseGlow = 0.35 + 0.35 * Math.sin(elapsedTime * 2.2);
+            (assembledGlowLine.material as THREE.LineBasicMaterial).opacity = pulseGlow;
             assembledGlowLine.visible = true;
           } else {
             (assembledGlowLine.material as THREE.LineBasicMaterial).opacity = 0.05;
           }
         }
 
-        // Pulse Schneider GridSense status beacon with vibrant golden glow
+        // Pulse GridSense status beacon with electric copper glow
         Object.values(roomMarkers).forEach((marker, index) => {
-          const pulse = 1.0 + 0.16 * Math.sin(elapsedTime * 3 + index);
-          marker.scale.set(pulse, pulse * 0.6, pulse);
+          const pulseMarker = 1.0 + 0.16 * Math.sin(elapsedTime * 3 + index);
+          marker.scale.set(pulseMarker, pulseMarker * 0.6, pulseMarker);
         });
 
-        if (anim.heatmap) {
+        if (targets.heatmap) {
           Object.values(heatmapPlanes).forEach((plane, idx) => {
             if (plane.material instanceof THREE.MeshBasicMaterial) {
               plane.material.opacity = 0.72 + 0.12 * Math.sin(elapsedTime * 2.5 + idx);
@@ -1246,8 +1381,8 @@ export const OfficeModel3D: React.FC<OfficeModel3DProps> = ({
 
       controls.update();
 
-      // Stereoscopic Dual Viewport VR Rendering Mode vs Normal Mono Rendering
-      if (anim.vrMode) {
+      // VR Dual Viewport Rendering vs Normal Mono Rendering
+      if (targets.vrMode) {
         const width = container.clientWidth;
         const height = container.clientHeight;
         const halfWidth = Math.floor(width / 2);
@@ -1320,22 +1455,42 @@ export const OfficeModel3D: React.FC<OfficeModel3DProps> = ({
     <div className="relative w-full h-full min-h-[500px] select-none">
       <div ref={mountRef} className="w-full h-full cursor-grab active:cursor-grabbing" />
 
+      {/* Active Level Spatial HUD Indicator (Deep Slate & Electric Copper) */}
+      <div className="absolute top-4 left-4 z-20 pointer-events-none flex items-center gap-2.5 px-3.5 py-1.5 rounded-xl bg-[#1e1e24]/90 backdrop-blur-xl border border-[#e06d3b]/40 shadow-[0_8px_25px_rgba(224,109,59,0.2)] transition-all">
+        <div
+          className={`w-2 h-2 rounded-full ${
+            activeFloor === 1
+              ? 'bg-[#e06d3b] shadow-[0_0_10px_#e06d3b] animate-pulse'
+              : activeFloor === 2
+              ? 'bg-[#ff8a50] shadow-[0_0_10px_#ff8a50] animate-pulse'
+              : 'bg-[#a1a1aa] shadow-[0_0_10px_#a1a1aa]'
+          }`}
+        />
+        <span className="text-xs font-mono font-semibold text-white tracking-wide">
+          {activeFloor === 1
+            ? 'Active: Floor 1 (Ground Deck — Isolated & Highlighted)'
+            : activeFloor === 2
+            ? 'Active: Floor 2 (Upper Deck — Isolated & Highlighted)'
+            : 'Active: All Floors (Full Dual-Deck Facility)'}
+        </span>
+      </div>
+
       {/* VR Stereoscopic Calibration Center Divider & Reticles */}
       {vrMode && (
         <div className="pointer-events-none absolute inset-0 z-30 flex">
           {/* Left Eye Reticle */}
           <div className="w-1/2 h-full flex items-center justify-center relative">
-            <div className="w-3 h-3 rounded-full border border-purple-400/80 bg-purple-400/20" />
-            <div className="absolute top-4 left-4 px-2 py-0.5 rounded bg-black/70 text-[10px] font-mono text-purple-300 border border-purple-500/30">
+            <div className="w-3 h-3 rounded-full border border-[#e06d3b]/80 bg-[#e06d3b]/20" />
+            <div className="absolute top-4 left-4 px-2 py-0.5 rounded bg-[#1e1e24]/90 text-[10px] font-mono text-[#d4d4d8] border border-[#e06d3b]/30">
               L · Eye
             </div>
           </div>
           {/* Center Dividing Line */}
-          <div className="w-[2px] h-full bg-gradient-to-b from-purple-500/30 via-white/50 to-purple-500/30 shadow-[0_0_10px_rgba(168,85,247,0.5)]" />
+          <div className="w-[2px] h-full bg-gradient-to-b from-[#e06d3b]/30 via-white/50 to-[#e06d3b]/30 shadow-[0_0_10px_rgba(224,109,59,0.5)]" />
           {/* Right Eye Reticle */}
           <div className="w-1/2 h-full flex items-center justify-center relative">
-            <div className="w-3 h-3 rounded-full border border-purple-400/80 bg-purple-400/20" />
-            <div className="absolute top-4 right-4 px-2 py-0.5 rounded bg-black/70 text-[10px] font-mono text-purple-300 border border-purple-500/30">
+            <div className="w-3 h-3 rounded-full border border-[#e06d3b]/80 bg-[#e06d3b]/20" />
+            <div className="absolute top-4 right-4 px-2 py-0.5 rounded bg-[#1e1e24]/90 text-[10px] font-mono text-[#d4d4d8] border border-[#e06d3b]/30">
               R · Eye
             </div>
           </div>

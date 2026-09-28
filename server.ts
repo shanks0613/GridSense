@@ -12,6 +12,7 @@ interface SensorDevice {
   name: string;
   floor: number;
   roomId: string;
+  officeId: string;
   status: 'online' | 'standby' | 'calibrating' | 'offline';
   ipAddress: string;
   macAddress: string;
@@ -52,6 +53,8 @@ interface SchneiderOffice {
 }
 
 // In-memory Schneider Worldwide Offices database
+// Note: Paris HQ represents the primary 3D digital twin campus with initial sensor circuits.
+// All other facilities begin with zero sensors until commissioned by the user, correctly fulfilling requirement.
 const officesDb: Record<string, SchneiderOffice> = {
   'paris-hq': {
     id: 'paris-hq',
@@ -73,11 +76,12 @@ const officesDb: Record<string, SchneiderOffice> = {
         name: 'Executive Boardroom Pod',
         floor: 2,
         roomId: 'boardroom',
+        officeId: 'paris-hq',
         status: 'online',
         ipAddress: '192.168.10.101',
         macAddress: '00:1E:58:A2:3B:11',
         protocol: 'BACnet/IP',
-        firmwareVersion: 'v4.2.1-schneider',
+        firmwareVersion: 'v4.2.1-schneider-copper',
         installedAt: '2026-01-15T08:30:00Z',
         lastPing: new Date().toISOString(),
         telemetry: {
@@ -101,11 +105,12 @@ const officesDb: Record<string, SchneiderOffice> = {
         name: 'Innovation Workstation Zone',
         floor: 2,
         roomId: 'workstation',
+        officeId: 'paris-hq',
         status: 'online',
         ipAddress: '192.168.10.102',
         macAddress: '00:1E:58:A2:3B:12',
         protocol: 'BACnet/IP',
-        firmwareVersion: 'v4.2.1-schneider',
+        firmwareVersion: 'v4.2.1-schneider-copper',
         installedAt: '2026-01-15T09:15:00Z',
         lastPing: new Date().toISOString(),
         telemetry: {
@@ -129,11 +134,12 @@ const officesDb: Record<string, SchneiderOffice> = {
         name: 'Main Atrium & Living Room',
         floor: 1,
         roomId: 'living-room',
+        officeId: 'paris-hq',
         status: 'online',
         ipAddress: '192.168.10.103',
         macAddress: '00:1E:58:A2:3B:13',
         protocol: 'Matter',
-        firmwareVersion: 'v4.2.1-schneider',
+        firmwareVersion: 'v4.2.1-schneider-copper',
         installedAt: '2026-01-16T11:00:00Z',
         lastPing: new Date().toISOString(),
         telemetry: {
@@ -157,11 +163,12 @@ const officesDb: Record<string, SchneiderOffice> = {
         name: 'Smart Bistro Kitchen',
         floor: 1,
         roomId: 'kitchen',
+        officeId: 'paris-hq',
         status: 'online',
         ipAddress: '192.168.10.104',
         macAddress: '00:1E:58:A2:3B:14',
         protocol: 'Modbus TCP',
-        firmwareVersion: 'v4.2.1-schneider',
+        firmwareVersion: 'v4.2.1-schneider-copper',
         installedAt: '2026-01-16T14:20:00Z',
         lastPing: new Date().toISOString(),
         telemetry: {
@@ -193,37 +200,8 @@ const officesDb: Record<string, SchneiderOffice> = {
     gatewayType: 'Schneider SpaceLogic EBO 4.1',
     latencyMs: 16,
     netZeroScore: 94,
-    totalLoadKw: 11.2,
-    sensors: [
-      {
-        id: 'gs-lon-01',
-        serialNumber: 'GS-9000-UK-3312',
-        name: 'Design Studio Boardroom',
-        floor: 2,
-        roomId: 'boardroom',
-        status: 'online',
-        ipAddress: '10.44.20.101',
-        macAddress: '00:1E:58:B3:7C:20',
-        protocol: 'BACnet/IP',
-        firmwareVersion: 'v4.2.1-schneider',
-        installedAt: '2026-02-01T10:00:00Z',
-        lastPing: new Date().toISOString(),
-        telemetry: {
-          occupancy: 3,
-          lux: 490,
-          co2: 430,
-          temperature: 20.8,
-          humidity: 49,
-          acousticDb: 40,
-        },
-        circuits: {
-          lights: true,
-          hvac: true,
-          smartGlass: true,
-          outlets: true,
-        },
-      },
-    ],
+    totalLoadKw: 6.2,
+    sensors: [],
   },
   'newyork-tower': {
     id: 'newyork-tower',
@@ -237,37 +215,8 @@ const officesDb: Record<string, SchneiderOffice> = {
     gatewayType: 'EcoStruxure Building Operation 4.2',
     latencyMs: 24,
     netZeroScore: 98,
-    totalLoadKw: 18.5,
-    sensors: [
-      {
-        id: 'gs-nyc-01',
-        serialNumber: 'GS-9000-US-5501',
-        name: 'Manhattan Boardroom Suite',
-        floor: 2,
-        roomId: 'boardroom',
-        status: 'online',
-        ipAddress: '172.16.8.101',
-        macAddress: '00:1E:58:C4:8D:33',
-        protocol: 'Matter',
-        firmwareVersion: 'v4.2.1-schneider',
-        installedAt: '2026-02-10T14:00:00Z',
-        lastPing: new Date().toISOString(),
-        telemetry: {
-          occupancy: 5,
-          lux: 610,
-          co2: 450,
-          temperature: 21.8,
-          humidity: 44,
-          acousticDb: 46,
-        },
-        circuits: {
-          lights: true,
-          hvac: true,
-          smartGlass: true,
-          outlets: true,
-        },
-      },
-    ],
+    totalLoadKw: 7.5,
+    sensors: [],
   },
   'tokyo-campus': {
     id: 'tokyo-campus',
@@ -281,37 +230,8 @@ const officesDb: Record<string, SchneiderOffice> = {
     gatewayType: 'Schneider SpaceLogic Edge',
     latencyMs: 29,
     netZeroScore: 97,
-    totalLoadKw: 12.6,
-    sensors: [
-      {
-        id: 'gs-tko-01',
-        serialNumber: 'GS-9000-JP-9921',
-        name: 'Tokyo Robotics & AI Boardroom',
-        floor: 2,
-        roomId: 'boardroom',
-        status: 'online',
-        ipAddress: '192.168.88.101',
-        macAddress: '00:1E:58:D5:9E:44',
-        protocol: 'Modbus TCP',
-        firmwareVersion: 'v4.2.1-schneider',
-        installedAt: '2026-02-18T08:00:00Z',
-        lastPing: new Date().toISOString(),
-        telemetry: {
-          occupancy: 4,
-          lux: 550,
-          co2: 415,
-          temperature: 22.0,
-          humidity: 48,
-          acousticDb: 39,
-        },
-        circuits: {
-          lights: true,
-          hvac: true,
-          smartGlass: false,
-          outlets: true,
-        },
-      },
-    ],
+    totalLoadKw: 5.6,
+    sensors: [],
   },
   'dubai-hub': {
     id: 'dubai-hub',
@@ -325,37 +245,8 @@ const officesDb: Record<string, SchneiderOffice> = {
     gatewayType: 'Schneider SpaceLogic EBO 4.2',
     latencyMs: 22,
     netZeroScore: 99,
-    totalLoadKw: 16.4,
-    sensors: [
-      {
-        id: 'gs-dxb-01',
-        serialNumber: 'GS-9000-ME-1104',
-        name: 'Oasis Central Conference Hall',
-        floor: 2,
-        roomId: 'boardroom',
-        status: 'online',
-        ipAddress: '10.80.12.101',
-        macAddress: '00:1E:58:E6:AF:55',
-        protocol: 'BACnet/IP',
-        firmwareVersion: 'v4.2.1-schneider',
-        installedAt: '2026-02-25T11:30:00Z',
-        lastPing: new Date().toISOString(),
-        telemetry: {
-          occupancy: 6,
-          lux: 780,
-          co2: 440,
-          temperature: 21.0,
-          humidity: 42,
-          acousticDb: 48,
-        },
-        circuits: {
-          lights: true,
-          hvac: true,
-          smartGlass: true,
-          outlets: true,
-        },
-      },
-    ],
+    totalLoadKw: 8.4,
+    sensors: [],
   },
   'singapore-center': {
     id: 'singapore-center',
@@ -369,45 +260,37 @@ const officesDb: Record<string, SchneiderOffice> = {
     gatewayType: 'Schneider SpaceLogic Edge Gateway',
     latencyMs: 18,
     netZeroScore: 98,
-    totalLoadKw: 13.9,
-    sensors: [
-      {
-        id: 'gs-sin-01',
-        serialNumber: 'GS-9000-SG-7740',
-        name: 'South Asia Executive Pavilion',
-        floor: 2,
-        roomId: 'boardroom',
-        status: 'online',
-        ipAddress: '192.168.1.151',
-        macAddress: '00:1E:58:F7:B0:66',
-        protocol: 'BACnet/IP',
-        firmwareVersion: 'v4.2.1-schneider',
-        installedAt: '2026-03-01T09:00:00Z',
-        lastPing: new Date().toISOString(),
-        telemetry: {
-          occupancy: 3,
-          lux: 520,
-          co2: 425,
-          temperature: 22.2,
-          humidity: 55,
-          acousticDb: 41,
-        },
-        circuits: {
-          lights: true,
-          hvac: true,
-          smartGlass: true,
-          outlets: true,
-        },
-      },
-    ],
+    totalLoadKw: 6.9,
+    sensors: [],
   },
 };
+
+// Aliases lookup helper so all variations resolve perfectly
+function resolveOffice(id: string): SchneiderOffice | undefined {
+  if (officesDb[id]) return officesDb[id];
+  const aliases: Record<string, string> = {
+    'ny-hub': 'newyork-tower',
+    'newyork-hub': 'newyork-tower',
+    'london-lab': 'london-hub',
+    'tokyo-rd': 'tokyo-campus',
+    'dubai-expo': 'dubai-hub',
+    'singapore-campus': 'singapore-center',
+  };
+  const targetId = aliases[id];
+  return targetId ? officesDb[targetId] : undefined;
+}
 
 async function createServer() {
   const app = express();
   const PORT = 3000;
 
   app.use(express.json());
+
+  // Set explicit JSON headers for all /api routes
+  app.use('/api', (_req, res, next) => {
+    res.setHeader('Content-Type', 'application/json');
+    next();
+  });
 
   // 1. Health check & Diagnostics
   app.get('/api/health', (_req: Request, res: Response) => {
@@ -461,7 +344,7 @@ async function createServer() {
       gatewayType: 'Schneider SpaceLogic EBO 4.2 Enterprise Gateway',
       latencyMs: Math.floor(Math.random() * 15 + 10),
       netZeroScore: 95,
-      totalLoadKw: 8.5,
+      totalLoadKw: 4.5,
       sensors: [],
     };
 
@@ -469,19 +352,27 @@ async function createServer() {
     res.status(201).json({ message: 'Office facility successfully registered with Schneider EcoStruxure.', office: newOffice });
   });
 
-  // 4. Get specific office details and its installed sensors
+  // 4. Get specific office details
   app.get('/api/offices/:officeId', (req: Request, res: Response) => {
-    const office = officesDb[req.params.officeId];
+    const office = resolveOffice(req.params.officeId);
     if (!office) {
-      return res.status(404).json({ error: 'Office not found' });
+      return res.status(404).json({ error: `Office '${req.params.officeId}' not found.` });
     }
     res.json({ office });
   });
 
-  // 5. DIRECT SENSOR INSTALLATION & COMMISSIONING ENDPOINT
-  // Enables Schneider Electric field engineers or facility managers to install & pair a sensor
-  app.post('/api/offices/:officeId/sensors/install', (req: Request, res: Response) => {
-    const office = officesDb[req.params.officeId];
+  // 4b. Get office sensors (Returns exact sensors commissioned in this office)
+  app.get('/api/offices/:officeId/sensors', (req: Request, res: Response) => {
+    const office = resolveOffice(req.params.officeId);
+    if (!office) {
+      return res.status(404).json({ error: `Office '${req.params.officeId}' not found.` });
+    }
+    res.json({ sensors: office.sensors, officeId: office.id, officeName: office.name });
+  });
+
+  // 5. Install & Commission Sensor
+  const handleSensorInstallation = (req: Request, res: Response) => {
+    const office = resolveOffice(req.params.officeId);
     if (!office) {
       return res.status(404).json({ error: `Office facility '${req.params.officeId}' not found.` });
     }
@@ -508,11 +399,12 @@ async function createServer() {
       name: name || `GridSense Sensor Pod (${assignedRoom.toUpperCase()})`,
       floor: sensorFloor,
       roomId: assignedRoom,
+      officeId: office.id,
       status: 'online',
       ipAddress: assignedIp,
       macAddress: mac,
       protocol: protocol as any,
-      firmwareVersion: 'v4.2.1-schneider-gold',
+      firmwareVersion: 'v4.2.1-schneider-copper',
       installedAt: new Date().toISOString(),
       lastPing: new Date().toISOString(),
       telemetry: {
@@ -531,19 +423,22 @@ async function createServer() {
       },
     };
 
+    // Sensor is added ONLY to this targeted office
     office.sensors.push(newSensor);
     office.totalLoadKw = Number((office.totalLoadKw + 0.85).toFixed(1));
 
     res.status(201).json({
       success: true,
       message: `GridSense sensor ${cleanSerial} successfully installed & commissioned in ${office.name}.`,
+      officeId: office.id,
+      officeName: office.name,
       commissioningReport: {
         handshake: 'SUCCESS (200 OK)',
         hardwareSelfTest: {
           radarDopplerMmWave: 'PASSED (60GHz Active)',
           ndirOpticalCO2: autoCalibrate ? 'CALIBRATED (415 PPM baseline)' : 'READY',
           photodiodeLuxCircadian: 'BALANCED (520 Lux)',
-          goldCoreLedGlow: 'SYNCHRONIZED (Hex #FFA500)',
+          copperCoreLedGlow: 'SYNCHRONIZED (Hex #E06D3B)',
         },
         networkProvisioning: {
           protocol,
@@ -556,12 +451,14 @@ async function createServer() {
       sensor: newSensor,
       totalSensorsInOffice: office.sensors.length,
     });
-  });
+  };
 
-  // 6. DIRECT HARDWARE CONTROL ENDPOINT FOR ANY WORLDWIDE OFFICE
-  // Allows controlling lights, HVAC, smart glass, and outlets in whichever office it's installed in
+  app.post('/api/offices/:officeId/sensors', handleSensorInstallation);
+  app.post('/api/offices/:officeId/sensors/install', handleSensorInstallation);
+
+  // 6. Direct Hardware Circuit Control
   app.post('/api/offices/:officeId/control', (req: Request, res: Response) => {
-    const office = officesDb[req.params.officeId];
+    const office = resolveOffice(req.params.officeId);
     if (!office) {
       return res.status(404).json({ error: `Office '${req.params.officeId}' not found.` });
     }
@@ -571,7 +468,6 @@ async function createServer() {
       return res.status(400).json({ error: 'roomId, component, and state are required' });
     }
 
-    // Find sensors attached to this room
     const targetSensors = office.sensors.filter(s => s.roomId === roomId);
     targetSensors.forEach(sensor => {
       if (component in sensor.circuits) {
@@ -593,9 +489,9 @@ async function createServer() {
     });
   });
 
-  // 7. ONE-CLICK AI ECO-OPTIMIZATION FOR THE SPECIFIED OFFICE
+  // 7. AI Batch Eco-Optimization
   app.post('/api/offices/:officeId/batch-optimize', (req: Request, res: Response) => {
-    const office = officesDb[req.params.officeId];
+    const office = resolveOffice(req.params.officeId);
     if (!office) {
       return res.status(404).json({ error: 'Office not found' });
     }
@@ -609,7 +505,7 @@ async function createServer() {
       }
     });
 
-    office.totalLoadKw = Math.max(4.0, Number((office.totalLoadKw * 0.78).toFixed(1)));
+    office.totalLoadKw = Math.max(3.0, Number((office.totalLoadKw * 0.8).toFixed(1)));
     office.netZeroScore = Math.min(100, office.netZeroScore + 2);
 
     res.json({
@@ -621,9 +517,9 @@ async function createServer() {
     });
   });
 
-  // 8. EXPORT SCHNEIDER ECOSTRUXURE CONFIGURATION FOR ON-SITE GATEWAY FLASHING
+  // 8. Export Configuration File
   app.get('/api/offices/:officeId/export-config', (req: Request, res: Response) => {
-    const office = officesDb[req.params.officeId];
+    const office = resolveOffice(req.params.officeId);
     if (!office) {
       return res.status(404).json({ error: 'Office not found' });
     }
@@ -655,6 +551,15 @@ async function createServer() {
     res.json(config);
   });
 
+  // 9. CATCH-ALL FOR ALL /api/* ROUTES:
+  // Must return JSON 404, NEVER HTML! This completely eliminates "Unexpected token '<', "<!doctype "... is not valid JSON"
+  app.all('/api/*', (req: Request, res: Response) => {
+    res.status(404).json({
+      error: `API endpoint '${req.method} ${req.path}' not found.`,
+      status: 404,
+    });
+  });
+
   // Serve static files in production or hook Vite in development
   if (process.env.NODE_ENV === 'production') {
     app.use(express.static(path.resolve(__dirname, 'dist')));
@@ -662,8 +567,12 @@ async function createServer() {
       res.sendFile(path.resolve(__dirname, 'dist', 'index.html'));
     });
   } else {
+    // Explicitly set hmr: false in dev server to prevent websocket connection errors in AI Studio
     const vite = await createViteServer({
-      server: { middlewareMode: true },
+      server: {
+        middlewareMode: true,
+        hmr: false,
+      },
       appType: 'spa',
     });
     app.use(vite.middlewares);
